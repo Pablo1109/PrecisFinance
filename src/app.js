@@ -1,5 +1,5 @@
-const STORAGE_KEY = "precis-finance-state-v1";
-const SECURE_KEY = "precis-finance-secure-v1";
+const LEGACY_STORAGE_KEY = "precis-finance-state-v1";
+const CLOUD_CACHE_PREFIX = "precis-finance-cloud-cache-v1:";
 const MONTH_FORMATTER = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
 const DATE_FORMATTER = new Intl.DateTimeFormat("pt-BR");
 
@@ -18,8 +18,11 @@ const routes = {
 const categoryColors = ["#176b5b", "#f27d72", "#4267b2", "#f0b84e", "#7d5ab6", "#26966f", "#c35f4d", "#5c7485"];
 
 let state = null;
-let encryptedMode = false;
-let sessionPin = null;
+let currentUser = null;
+let supabaseClient = null;
+let cloudChannel = null;
+let lastCloudUpdatedAt = "";
+let syncStatus = "desconectado";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -31,14 +34,7 @@ async function bootstrap() {
   bindShellEvents();
   registerServiceWorker();
 
-  if (localStorage.getItem(SECURE_KEY)) {
-    encryptedMode = true;
-    showLockScreen();
-    return;
-  }
-
-  state = loadPlainState();
-  afterStateLoaded();
+  await initCloudAuth();
 }
 
 function bindShellEvents() {
@@ -60,33 +56,29 @@ function bindShellEvents() {
   });
 
   $("#lockButton").addEventListener("click", () => {
-    if (!state) return;
-    if (encryptedMode) {
-      lockApp();
-    } else {
-      location.hash = "#/security";
+    if (currentUser) signOut();
+    else showAuthScreen();
+  });
+
+  $("#lockScreen").addEventListener("click", async (event) => {
+    const submitter = event.target.closest("[data-auth-action]");
+    if (!submitter) return;
+    if (submitter.dataset.authAction === "setup") {
+      showCloudSetupScreen();
+      return;
     }
-  });
-
-  $("#unlockForm").addEventListener("submit", async (event) => {
+    const form = submitter.closest("form");
+    if (!form) return;
     event.preventDefault();
-    await unlockWithPin($("#unlockPin").value);
-  });
-
-  $("#resetEncryptedData").addEventListener("click", () => {
-    if (!confirm("Apagar os dados protegidos deste navegador?")) return;
-    localStorage.removeItem(SECURE_KEY);
-    sessionPin = null;
-    encryptedMode = false;
-    state = createSeedState();
-    persist();
-    $("#lockScreen").hidden = true;
-    afterStateLoaded();
-    toast("Dados protegidos apagados. Um novo painel foi criado.");
+    await handleAuthSubmit(form, submitter.dataset.authAction);
   });
 
   window.addEventListener("hashchange", () => {
     if (state) render();
+  });
+
+  window.addEventListener("online", () => {
+    if (state && currentUser) persistAndRender("Conexão voltou. Dados sincronizados.");
   });
 }
 
@@ -96,19 +88,295 @@ function afterStateLoaded() {
   render();
 }
 
-function loadPlainState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    const seed = createSeedState();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
-    return seed;
+async function initCloudAuth() {
+  showAuthScreen("Carregando login...");
+
+  const config = getCloudConfig();
+  if (!config.url || !config.anonKey) {
+    showCloudSetupScreen();
+    return;
   }
 
   try {
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    supabaseClient = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+
+    if (data.session?.user) {
+      await loadUserSession(data.session.user);
+    } else {
+      showAuthScreen();
+    }
+
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user && session.user.id !== currentUser?.id) {
+        await loadUserSession(session.user);
+      }
+      if (event === "SIGNED_OUT") {
+        clearSessionState();
+        showAuthScreen();
+      }
+    });
+  } catch {
+    showCloudSetupScreen("Não foi possível iniciar o login em nuvem. Confira as chaves do Supabase.");
+  }
+}
+
+function getCloudConfig() {
+  const env = window.PRECIS_ENV || {};
+  return {
+    url: env.SUPABASE_URL || "",
+    anonKey: env.SUPABASE_ANON_KEY || ""
+  };
+}
+
+async function handleAuthSubmit(form, action) {
+  if (!supabaseClient) {
+    showCloudSetupScreen();
+    return;
+  }
+
+  const data = Object.fromEntries(new FormData(form).entries());
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
+
+  if (!email || !password) {
+    toast("Informe e-mail e senha.");
+    return;
+  }
+
+  setAuthBusy(form, true);
+  try {
+    if (action === "signup") {
+      const { data: result, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: data.name || "" } }
+      });
+      if (error) throw error;
+      if (result.session?.user) {
+        await loadUserSession(result.session.user);
+      } else {
+        showAuthScreen("Conta criada. Confirme seu e-mail para entrar, se a confirmação estiver ativa no Supabase.");
+      }
+      return;
+    }
+
+    const { data: result, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await loadUserSession(result.user);
+  } catch (error) {
+    toast(error.message || "Não foi possível entrar.");
+  } finally {
+    setAuthBusy(form, false);
+  }
+}
+
+function setAuthBusy(form, busy) {
+  $$("button, input", form).forEach((element) => {
+    element.disabled = busy;
+  });
+}
+
+async function loadUserSession(user) {
+  currentUser = user;
+  syncStatus = "sincronizando";
+  $("#lockScreen").hidden = true;
+
+  const cached = loadCachedCloudState(user.id);
+  const legacy = readLegacyLocalState();
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("finance_states")
+      .select("state, updated_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data?.state) {
+      state = normalizeState(data.state);
+      lastCloudUpdatedAt = data.updated_at || "";
+      cacheCloudState();
+      syncStatus = "sincronizado";
+    } else {
+      state = cached || legacy || createSeedState();
+      await saveCloudState();
+    }
+  } catch (error) {
+    if (cached || legacy) {
+      state = cached || legacy;
+      syncStatus = "pendente";
+      toast("Sem acesso ao banco agora. Usando dados salvos neste navegador.");
+    } else {
+      state = createSeedState();
+      syncStatus = "erro";
+      toast("Crie a tabela finance_states no Supabase para salvar em nuvem.");
+    }
+  }
+
+  subscribeToCloudChanges();
+  afterStateLoaded();
+}
+
+function readLegacyLocalState() {
+  const saved = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (!saved) return null;
+  try {
     return normalizeState(JSON.parse(saved));
   } catch {
-    return createSeedState();
+    return null;
   }
+}
+
+function showAuthScreen(message = "") {
+  const config = getCloudConfig();
+  const locked = $("#lockScreen");
+  locked.innerHTML = `
+    <form class="lock-panel auth-panel" id="cloudAuthForm">
+      <img src="assets/icon.svg" alt="" />
+      <h2>Precis Finance</h2>
+      <p>${escapeHtml(message || "Entre para sincronizar suas finanças em qualquer dispositivo.")}</p>
+      ${
+        config.url && config.anonKey
+          ? `
+            <label class="field">
+              Nome
+              <input name="name" autocomplete="name" placeholder="Usado ao criar conta" />
+            </label>
+            <label class="field">
+              E-mail
+              <input name="email" type="email" autocomplete="email" required />
+            </label>
+            <label class="field">
+              Senha
+              <input name="password" type="password" autocomplete="current-password" minlength="6" required />
+            </label>
+            <button type="submit" class="primary-action" data-auth-action="signin">Entrar</button>
+            <button type="submit" class="secondary-action" data-auth-action="signup">Criar conta</button>
+          `
+          : `<button type="button" class="primary-action" data-auth-action="setup">Configurar Supabase</button>`
+      }
+    </form>
+  `;
+  locked.hidden = false;
+}
+
+function showCloudSetupScreen(message = "") {
+  const locked = $("#lockScreen");
+  locked.innerHTML = `
+    <section class="lock-panel auth-panel">
+      <img src="assets/icon.svg" alt="" />
+      <h2>Configurar nuvem</h2>
+      <p>${escapeHtml(message || "Configure SUPABASE_URL e SUPABASE_ANON_KEY no Vercel para ativar login e sincronização.")}</p>
+      <div class="setup-code">
+        <strong>Variáveis no Vercel</strong>
+        <span>SUPABASE_URL</span>
+        <span>SUPABASE_ANON_KEY</span>
+      </div>
+      <p>Depois rode o SQL em <strong>database/supabase.sql</strong> no Supabase.</p>
+    </section>
+  `;
+  locked.hidden = false;
+}
+
+function cloudCacheKey(userId = currentUser?.id) {
+  return `${CLOUD_CACHE_PREFIX}${userId}`;
+}
+
+function loadCachedCloudState(userId) {
+  const saved = localStorage.getItem(cloudCacheKey(userId));
+  if (!saved) return null;
+  try {
+    return normalizeState(JSON.parse(saved));
+  } catch {
+    return null;
+  }
+}
+
+function cacheCloudState() {
+  if (!currentUser || !state) return;
+  localStorage.setItem(cloudCacheKey(), JSON.stringify(state));
+}
+
+async function saveCloudState() {
+  if (!supabaseClient || !currentUser || !state) return;
+  cacheCloudState();
+
+  try {
+    syncStatus = "sincronizando";
+    const updatedAt = new Date().toISOString();
+    const { error } = await supabaseClient.from("finance_states").upsert(
+      {
+        user_id: currentUser.id,
+        state,
+        updated_at: updatedAt
+      },
+      { onConflict: "user_id" }
+    );
+    if (error) throw error;
+    lastCloudUpdatedAt = updatedAt;
+    syncStatus = "sincronizado";
+  } catch {
+    syncStatus = "pendente";
+  }
+}
+
+function subscribeToCloudChanges() {
+  if (!supabaseClient || !currentUser) return;
+  if (cloudChannel) {
+    supabaseClient.removeChannel(cloudChannel);
+    cloudChannel = null;
+  }
+
+  cloudChannel = supabaseClient
+    .channel(`finance-state-${currentUser.id}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "finance_states",
+        filter: `user_id=eq.${currentUser.id}`
+      },
+      (payload) => {
+        const incoming = payload.new;
+        if (!incoming?.state || !incoming.updated_at || incoming.updated_at <= lastCloudUpdatedAt) return;
+        state = normalizeState(incoming.state);
+        lastCloudUpdatedAt = incoming.updated_at;
+        syncStatus = "sincronizado";
+        cacheCloudState();
+        hydratePeriodSelect();
+        render();
+        toast("Dados atualizados pela nuvem.");
+      }
+    )
+    .subscribe();
+}
+
+async function signOut() {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
+}
+
+function clearSessionState() {
+  if (cloudChannel && supabaseClient) {
+    supabaseClient.removeChannel(cloudChannel);
+  }
+  cloudChannel = null;
+  currentUser = null;
+  state = null;
+  lastCloudUpdatedAt = "";
+  syncStatus = "desconectado";
 }
 
 function normalizeState(value) {
@@ -257,6 +525,10 @@ function hydratePeriodSelect() {
 function renderSidebarSummary() {
   const total = totalPatrimony();
   $("#sidebarSummary").innerHTML = `
+    <p>Conta conectada</p>
+    <strong>${escapeHtml(currentUser?.email || "sem login")}</strong>
+    <p>Status: ${escapeHtml(syncStatus)}</p>
+    <hr>
     <p>Patrimônio atual</p>
     <strong>${money(total)}</strong>
     <p>${state.accounts.length} contas, ${state.cards.length} cartões</p>
@@ -730,65 +1002,41 @@ function renderSecurity(container) {
       <article class="panel">
         <div class="panel-header">
           <div>
-            <h2>Bloqueio local</h2>
-            <p>${encryptedMode ? "Os dados deste navegador estão protegidos por PIN." : "Ative um PIN para criptografar os dados salvos neste navegador."}</p>
+            <h2>Conta em nuvem</h2>
+            <p>${currentUser ? escapeHtml(currentUser.email) : "Nenhum usuario conectado."}</p>
           </div>
-          <span class="pill ${encryptedMode ? "" : "neutral"}">${encryptedMode ? "ativo" : "inativo"}</span>
+          <span class="pill ${syncStatus === "sincronizado" ? "" : syncStatus === "pendente" ? "warn" : "neutral"}">${escapeHtml(syncStatus)}</span>
         </div>
-        ${
-          encryptedMode
-            ? `
-              <div class="inline-group">
-                <button class="primary-action" type="button" id="lockNow">Bloquear agora</button>
-                <button class="danger-action" type="button" id="disablePin">Desativar PIN</button>
-              </div>
-            `
-            : `
-              <form id="pinForm" class="form-grid">
-                <label class="field">
-                  Novo PIN
-                  <input name="pin" type="password" inputmode="numeric" minlength="4" required />
-                </label>
-                <label class="field">
-                  Confirmar PIN
-                  <input name="confirmPin" type="password" inputmode="numeric" minlength="4" required />
-                </label>
-                <div class="field full">
-                  <button class="primary-action" type="submit">Ativar proteção</button>
-                </div>
-              </form>
-            `
-        }
+        <p class="muted">Entrando com o mesmo e-mail em outro dispositivo, o painel carrega o mesmo estado salvo no Supabase.</p>
+        <div class="inline-group">
+          <button class="primary-action" type="button" id="syncNow">Sincronizar agora</button>
+          <button class="danger-action" type="button" id="signOutNow">Sair da conta</button>
+        </div>
       </article>
 
       <article class="panel">
         <div class="panel-header">
           <div>
             <h2>Backups</h2>
-            <p>Exporte ou restaure os dados deste navegador.</p>
+            <p>Exporte ou restaure os dados da sua conta.</p>
           </div>
         </div>
         <div class="inline-group">
           <button class="secondary-action" type="button" id="exportBackup">Exportar JSON</button>
           <label class="secondary-action" for="backupInput">Importar JSON</label>
           <input id="backupInput" type="file" accept="application/json,.json" hidden />
-          <button class="danger-action" type="button" id="resetDemo">Resetar demo</button>
+          <button class="danger-action" type="button" id="resetDemo">Resetar meus dados</button>
         </div>
       </article>
     </section>
 
     <section class="notice-band">
-      A versão web estática guarda os dados no navegador atual. Sincronização real em nuvem, Open Finance produtivo e leitura automática de SMS exigem backend e integrações externas.
+      Login e sincronizacao usam Supabase Auth e a tabela finance_states com regras de seguranca por usuario. Open Finance produtivo e leitura automatica de SMS ainda exigem integracoes externas especificas.
     </section>
   `;
 
-  if (encryptedMode) {
-    $("#lockNow", container).addEventListener("click", lockApp);
-    $("#disablePin", container).addEventListener("click", disablePin);
-  } else {
-    $("#pinForm", container).addEventListener("submit", enablePin);
-  }
-
+  $("#syncNow", container).addEventListener("click", () => persistAndRender("Dados enviados para a nuvem."));
+  $("#signOutNow", container).addEventListener("click", signOut);
   $("#exportBackup", container).addEventListener("click", exportBackup);
   $("#backupInput", container).addEventListener("change", (event) => importBackup(event.target.files[0]));
   $("#resetDemo", container).addEventListener("click", resetDemo);
@@ -1716,90 +1964,13 @@ function importBackup(file) {
 }
 
 function resetDemo() {
-  if (!confirm("Resetar todos os dados deste navegador?")) return;
+  if (!confirm("Resetar todos os dados da sua conta?")) return;
   state = createSeedState();
-  sessionPin = null;
-  encryptedMode = false;
-  localStorage.removeItem(SECURE_KEY);
-  persistAndRender("Demo restaurada.");
-}
-
-async function enablePin(event) {
-  event.preventDefault();
-  if (!crypto?.subtle) {
-    toast("Ative o PIN usando HTTPS ou localhost para liberar a criptografia do navegador.");
-    return;
-  }
-  const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-  if (data.pin !== data.confirmPin) {
-    toast("Os PINs não conferem.");
-    return;
-  }
-  sessionPin = data.pin;
-  encryptedMode = true;
-  localStorage.removeItem(STORAGE_KEY);
-  await persist();
-  render();
-  toast("Proteção ativada.");
-}
-
-async function disablePin() {
-  const pin = prompt("Digite o PIN atual para desativar.");
-  if (!pin) return;
-  try {
-    await decryptState(pin);
-    encryptedMode = false;
-    sessionPin = null;
-    localStorage.removeItem(SECURE_KEY);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    render();
-    toast("PIN desativado.");
-  } catch {
-    toast("PIN incorreto.");
-  }
-}
-
-function lockApp() {
-  if (!encryptedMode) return;
-  sessionPin = null;
-  state = null;
-  $("#unlockPin").value = "";
-  showLockScreen();
-}
-
-function showLockScreen() {
-  $("#lockScreen").hidden = false;
-  $("#unlockPin").focus();
-}
-
-async function unlockWithPin(pin) {
-  try {
-    state = await decryptState(pin);
-    sessionPin = pin;
-    $("#lockScreen").hidden = true;
-    afterStateLoaded();
-    toast("Painel desbloqueado.");
-  } catch {
-    toast("PIN incorreto ou dados corrompidos.");
-  }
-}
-
-async function decryptState(pin) {
-  const envelope = JSON.parse(localStorage.getItem(SECURE_KEY));
-  const key = await deriveKey(pin, fromBase64(envelope.salt), envelope.iterations);
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64(envelope.iv) }, key, fromBase64(envelope.data));
-  return normalizeState(JSON.parse(new TextDecoder().decode(decrypted)));
+  persistAndRender("Dados resetados e enviados para a nuvem.");
 }
 
 async function persist() {
-  if (encryptedMode) {
-    if (!sessionPin) return;
-    const envelope = await encryptState(JSON.stringify(state), sessionPin);
-    localStorage.setItem(SECURE_KEY, JSON.stringify(envelope));
-    localStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  await saveCloudState();
 }
 
 async function persistAndRender(message) {
@@ -1807,32 +1978,6 @@ async function persistAndRender(message) {
   hydratePeriodSelect();
   render();
   if (message) toast(message);
-}
-
-async function encryptState(plainText, pin) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const iterations = 160000;
-  const key = await deriveKey(pin, salt, iterations);
-  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plainText));
-  return {
-    version: 1,
-    iterations,
-    salt: toBase64(salt),
-    iv: toBase64(iv),
-    data: toBase64(new Uint8Array(encrypted))
-  };
-}
-
-async function deriveKey(pin, salt, iterations) {
-  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
-    material,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
 }
 
 function monthlyTotals(month) {
@@ -2211,23 +2356,6 @@ function downloadBlob(filename, content, type) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-}
-
-function toBase64(bytes) {
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
-}
-
-function fromBase64(value) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
 }
 
 function toast(message) {

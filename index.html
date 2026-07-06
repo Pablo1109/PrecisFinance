@@ -67,19 +67,17 @@
     </div>
 
     <section class="lock-screen" id="lockScreen" hidden>
-      <form class="lock-panel" id="unlockForm">
+      <section class="lock-panel">
         <img src="assets/icon.svg" alt="" />
         <h2>Precis Finance</h2>
-        <p>Digite seu PIN para abrir o painel.</p>
-        <input id="unlockPin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN" required />
-        <button type="submit" class="primary-action">Desbloquear</button>
-        <button type="button" class="ghost-action" id="resetEncryptedData">Apagar dados protegidos</button>
-      </form>
+        <p>Carregando login em nuvem...</p>
+      </section>
     </section>
 
     <div id="modalRoot"></div>
     <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 
+    <script src="src/env.js"></script>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>

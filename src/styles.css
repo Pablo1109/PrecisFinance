@@ -161,6 +161,13 @@ a {
   font-size: 1.35rem;
 }
 
+.sidebar-summary hr {
+  height: 1px;
+  margin: 12px 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .workspace {
   min-width: 0;
   padding: 24px clamp(16px, 3vw, 36px) 42px;
@@ -710,6 +717,10 @@ tr:last-child td {
   text-align: center;
 }
 
+.auth-panel {
+  width: min(420px, 100%);
+}
+
 .lock-panel img {
   width: 62px;
   height: 62px;
@@ -728,6 +739,30 @@ tr:last-child td {
   border-radius: 8px;
   padding: 10px 12px;
   text-align: center;
+}
+
+.auth-panel .field {
+  text-align: left;
+}
+
+.auth-panel .field input {
+  text-align: left;
+}
+
+.setup-code {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f7fb;
+  text-align: left;
+}
+
+.setup-code span {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  color: var(--brand-strong);
+  overflow-wrap: anywhere;
 }
 
 .toast-root {

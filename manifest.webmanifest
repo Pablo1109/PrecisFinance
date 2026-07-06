@@ -1,7 +1,7 @@
 {
   "name": "Precis Finance",
   "short_name": "Precis",
-  "description": "Controle financeiro pessoal com orcamentos, metas, cartoes e relatorios.",
+  "description": "Controle financeiro pessoal com login em nuvem, orcamentos, metas, cartoes e relatorios.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f6f7fb",

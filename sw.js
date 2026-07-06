@@ -2,6 +2,7 @@ const CACHE_NAME = "precis-finance-v1";
 const APP_ASSETS = [
   "/",
   "/index.html",
+  "/src/env.js",
   "/src/styles.css",
   "/src/app.js",
   "/manifest.webmanifest",

@@ -1,6 +1,6 @@
 # Precis Finance
 
-Aplicativo web de controle financeiro pessoal, inspirado nas categorias de recursos que você descreveu: contas, cartões, lançamentos, orçamentos, metas, relatórios, importações, automações, modo offline e bloqueio local por PIN.
+Aplicativo web de controle financeiro pessoal com login em nuvem: contas, cartões, lançamentos, orçamentos, metas, relatórios, importações, automações, modo offline e sincronização por usuário.
 
 ## O que está pronto
 
@@ -12,12 +12,27 @@ Aplicativo web de controle financeiro pessoal, inspirado nas categorias de recur
 - Metas financeiras com progresso e aportes.
 - Relatórios com gráficos em canvas, filtros e exportação CSV/Excel.
 - Importação de extrato CSV e leitura de notificações/SMS colados manualmente.
+- Login por e-mail/senha via Supabase Auth.
+- Dados separados por usuário e sincronizados em nuvem pela tabela `finance_states`.
 - PWA com service worker para abrir offline depois do primeiro carregamento.
-- Bloqueio por PIN com criptografia local via Web Crypto quando ativado.
 
-## Limites honestos da versão estática
+## Configurar login em nuvem
 
-Esta versão não conecta bancos reais por Open Finance, não lê SMS automaticamente do celular e não sincroniza dados entre dispositivos em nuvem. Essas partes exigem backend, credenciais regulatórias/fornecedor de Open Finance e app nativo ou wrapper mobile. A interface e a arquitetura de dados já deixam o caminho preparado para plugar esses serviços depois.
+1. Crie um projeto no Supabase.
+2. No Supabase, abra o SQL Editor e rode o arquivo `database/supabase.sql`.
+3. Em Authentication, deixe Email/Password ativo.
+4. No Vercel, configure as variáveis de ambiente:
+
+```text
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua-chave-anon-public
+```
+
+5. Faça um novo deploy. O build gera `public/src/env.js` com essas variáveis.
+
+## Limites honestos da versão atual
+
+Esta versão já sincroniza os dados financeiros por usuário em nuvem. Ela ainda não conecta bancos reais por Open Finance e não lê SMS automaticamente do celular. Essas partes exigem credenciais regulatórias/fornecedor de Open Finance e app nativo ou wrapper mobile.
 
 ## Rodar localmente
 
@@ -31,14 +46,14 @@ Depois abra:
 http://localhost:5173
 ```
 
-Também dá para abrir o `index.html` direto no navegador, mas o modo offline/PWA precisa de servidor HTTP.
+Para testar login em nuvem localmente, edite `src/env.js` com suas chaves públicas do Supabase. Não coloque chaves secretas nesse arquivo.
 
 ## Publicar no Vercel
 
 1. Envie estes arquivos para um repositório no GitHub.
 2. No Vercel, importe o repositório.
 3. Use o preset `Other`.
-4. Deixe o diretório de saída como a raiz do projeto.
+4. Configure `SUPABASE_URL` e `SUPABASE_ANON_KEY`.
 5. Publique.
 
-O arquivo `vercel.json` já inclui URLs limpas e redirecionamentos básicos.
+O arquivo `vercel.json` já aponta a saída para `public`, criada pelo script de build.
