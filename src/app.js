@@ -1245,6 +1245,7 @@ function openTransactionModal(transactionId = "") {
     location: "",
     note: "",
     recurring: false,
+    installmentTotal: 1,
     attachmentName: ""
   };
 
@@ -1269,6 +1270,10 @@ function openTransactionModal(transactionId = "") {
       <label class="field">
         Valor
         <input name="amount" inputmode="decimal" value="${formatInputAmount(model.amount)}" required />
+      </label>
+      <label class="field">
+        Parcelas
+        <input name="installments" id="txInstallments" type="number" min="1" max="60" value="${existing?.installmentTotal || 1}" ${existing?.installmentGroupId ? "disabled" : ""} />
       </label>
       <label class="field">
         Moeda
@@ -1318,10 +1323,12 @@ function openTransactionModal(transactionId = "") {
         <input name="recurring" type="checkbox" ${model.recurring ? "checked" : ""} />
         Repetir mensalmente
       </label>
+      <p class="field full muted" id="installmentHint">Para compra parcelada, informe o valor total e escolha um cartão. O app cria uma parcela por mês.</p>
     </form>
   `, async (form) => {
     const data = Object.fromEntries(new FormData(form).entries());
     const file = form.elements.attachment.files[0];
+    const installments = existing ? 1 : Math.max(1, Math.min(60, Number(data.installments) || 1));
     const next = {
       ...model,
       id: existing?.id || uid("tx"),
@@ -1338,6 +1345,7 @@ function openTransactionModal(transactionId = "") {
       location: data.location,
       note: data.note,
       recurring: data.recurring === "on",
+      installmentTotal: existing?.installmentTotal || installments,
       attachmentName: file?.name || model.attachmentName || "",
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1346,6 +1354,15 @@ function openTransactionModal(transactionId = "") {
     if (!next.amount || next.amount <= 0) {
       toast("Informe um valor maior que zero.");
       return false;
+    }
+
+    if (!existing && installments > 1) {
+      if (next.type !== "expense" || !next.cardId) {
+        toast("Compra parcelada precisa ser uma despesa no cartão.");
+        return false;
+      }
+      createInstallmentPurchase(next, installments);
+      return true;
     }
 
     upsertTransaction(next, existing);
@@ -1742,12 +1759,51 @@ function upsertTransaction(next, existing = null) {
   persistAndRender(existing ? "Lançamento atualizado." : "Lançamento criado.");
 }
 
+function createInstallmentPurchase(baseTransaction, installments) {
+  const groupId = uid("inst");
+  const total = Number(baseTransaction.amount) || 0;
+  const baseAmount = Math.floor((total / installments) * 100) / 100;
+  let accumulated = 0;
+  const created = [];
+
+  for (let index = 1; index <= installments; index += 1) {
+    const isLast = index === installments;
+    const amount = isLast ? Math.round((total - accumulated) * 100) / 100 : baseAmount;
+    accumulated += amount;
+
+    const transaction = {
+      ...baseTransaction,
+      id: uid("tx"),
+      date: addMonthsToDate(baseTransaction.date, index - 1),
+      description: `${baseTransaction.description} (${index}/${installments})`,
+      amount,
+      recurring: false,
+      installmentGroupId: groupId,
+      installmentIndex: index,
+      installmentTotal: installments,
+      installmentTotalAmount: total,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    created.push(transaction);
+  }
+
+  state.transactions.unshift(...created.reverse());
+  state.settings.selectedMonth = baseTransaction.date.slice(0, 7);
+  persistAndRender(`${installments} parcelas criadas.`);
+}
+
 function deleteTransaction(id) {
   const transaction = findTransaction(id);
   if (!transaction || !confirm("Excluir este lançamento?")) return;
-  applyTransactionImpact(transaction, -1);
-  state.transactions = state.transactions.filter((item) => item.id !== id);
-  persistAndRender("Lançamento excluído.");
+  const deleteGroup = transaction.installmentGroupId && confirm("Esta compra é parcelada. Clique em OK para excluir todas as parcelas, ou Cancelar para excluir só esta parcela.");
+  const toDelete = deleteGroup
+    ? state.transactions.filter((item) => item.installmentGroupId === transaction.installmentGroupId)
+    : [transaction];
+  toDelete.forEach((item) => applyTransactionImpact(item, -1));
+  const ids = new Set(toDelete.map((item) => item.id));
+  state.transactions = state.transactions.filter((item) => !ids.has(item.id));
+  persistAndRender(deleteGroup ? "Compra parcelada excluída." : "Lançamento excluído.");
 }
 
 function applyTransactionImpact(transaction, direction) {
@@ -2359,6 +2415,14 @@ function shiftMonth(month, delta) {
   const [year, monthIndex] = month.split("-").map(Number);
   const date = new Date(year, monthIndex - 1 + delta, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function addMonthsToDate(value, delta) {
+  const [year, month, day] = value.split("-").map(Number);
+  const target = new Date(year, month - 1 + delta, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 }
 
 function lastMonths(month, count) {
