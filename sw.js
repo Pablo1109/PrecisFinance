@@ -1,4 +1,4 @@
-const CACHE_NAME = "precis-finance-v1";
+const CACHE_NAME = "precis-finance-v2";
 const APP_ASSETS = [
   "/",
   "/index.html",
