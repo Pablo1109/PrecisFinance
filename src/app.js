@@ -984,15 +984,31 @@ function renderAutomation(container) {
         ${state.rules.map(ruleCard).join("")}
       </div>
     </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Categorias</h2>
+          <p>Crie e edite categorias usadas nos lançamentos, orçamentos e relatórios.</p>
+        </div>
+        <button class="secondary-action" type="button" id="addCategory">Nova categoria</button>
+      </div>
+      <div class="card-grid">
+        ${state.categories.map(categoryCard).join("")}
+      </div>
+    </section>
   `;
 
   $("#processRecurring", container).addEventListener("click", processRecurringForMonth);
   $("#parseNotifications", container).addEventListener("click", () => importNotifications($("#notificationText", container).value));
   $("#addRule", container).addEventListener("click", () => openRuleModal());
+  $("#addCategory", container).addEventListener("click", () => openCategoryModal());
   container.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     if (button.dataset.action === "delete-rule") deleteRule(button.dataset.id);
+    if (button.dataset.action === "edit-category") openCategoryModal(button.dataset.id);
+    if (button.dataset.action === "delete-category") deleteCategory(button.dataset.id);
   });
 }
 
@@ -1177,6 +1193,25 @@ function ruleCard(rule) {
         <button class="icon-button" type="button" title="Excluir regra" data-action="delete-rule" data-id="${rule.id}">×</button>
       </div>
       <p class="muted">${category ? escapeHtml(category.name) : "Categoria"}${rule.subcategory ? ` › ${escapeHtml(rule.subcategory)}` : ""}</p>
+    </article>
+  `;
+}
+
+function categoryCard(category) {
+  const txCount = state.transactions.filter((transaction) => transaction.categoryId === category.id).length;
+  const budgetCount = state.budgets.filter((budget) => budget.categoryId === category.id).length;
+  return `
+    <article class="item-card">
+      <div class="item-title">
+        <span class="inline-group"><span class="swatch" style="background:${category.color}"></span><strong>${escapeHtml(category.name)}</strong></span>
+        <span class="pill ${category.type === "income" ? "" : "neutral"}">${category.type === "income" ? "receita" : "despesa"}</span>
+      </div>
+      <p class="muted">${category.subcategories?.length ? category.subcategories.map(escapeHtml).join(", ") : "Sem subcategorias"}</p>
+      <small class="muted">${txCount} lançamento(s) · ${budgetCount} orçamento(s)</small>
+      <div class="inline-group">
+        <button class="secondary-action" type="button" data-action="edit-category" data-id="${category.id}">Editar</button>
+        <button class="danger-action" type="button" data-action="delete-category" data-id="${category.id}">Excluir</button>
+      </div>
     </article>
   `;
 }
@@ -1600,6 +1635,62 @@ function openRuleModal() {
   });
 }
 
+function openCategoryModal(categoryId = "") {
+  const existing = categoryId ? findCategory(categoryId) : null;
+  const model = existing || {
+    type: "expense",
+    name: "",
+    subcategories: [],
+    color: "#176b5b"
+  };
+
+  openModal(existing ? "Editar categoria" : "Nova categoria", `
+    <form id="modalForm" class="form-grid">
+      <label class="field">
+        Nome
+        <input name="name" value="${escapeAttr(model.name)}" required />
+      </label>
+      <label class="field">
+        Tipo
+        <select name="type">
+          <option value="expense" ${model.type === "expense" ? "selected" : ""}>Despesa</option>
+          <option value="income" ${model.type === "income" ? "selected" : ""}>Receita</option>
+        </select>
+      </label>
+      <label class="field">
+        Cor
+        <input name="color" type="color" value="${model.color || "#176b5b"}" />
+      </label>
+      <label class="field full">
+        Subcategorias
+        <textarea name="subcategories" placeholder="Ex: Supermercado, Restaurante, Delivery">${escapeHtml((model.subcategories || []).join(", "))}</textarea>
+      </label>
+    </form>
+  `, (form) => {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const subcategories = String(data.subcategories || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const next = {
+      id: existing?.id || uid("cat"),
+      type: data.type,
+      name: data.name.trim(),
+      subcategories,
+      color: data.color
+    };
+
+    if (existing) {
+      state.categories = state.categories.map((category) => (category.id === existing.id ? next : category));
+    } else {
+      state.categories.push(next);
+    }
+
+    persistAndRender("Categoria salva.");
+    return true;
+  });
+}
+
 function openModal(title, bodyHtml, onSubmit) {
   const root = $("#modalRoot");
   root.innerHTML = `
@@ -1748,6 +1839,23 @@ function deleteGoal(id) {
 function deleteRule(id) {
   state.rules = state.rules.filter((rule) => rule.id !== id);
   persistAndRender("Regra excluída.");
+}
+
+function deleteCategory(id) {
+  const category = findCategory(id);
+  if (!category) return;
+  const txCount = state.transactions.filter((transaction) => transaction.categoryId === id).length;
+  const budgetCount = state.budgets.filter((budget) => budget.categoryId === id).length;
+  const ruleCount = state.rules.filter((rule) => rule.categoryId === id).length;
+
+  if (txCount || budgetCount || ruleCount) {
+    toast("Esta categoria está em uso. Edite o nome/subcategorias em vez de excluir.");
+    return;
+  }
+
+  if (!confirm(`Excluir a categoria "${category.name}"?`)) return;
+  state.categories = state.categories.filter((item) => item.id !== id);
+  persistAndRender("Categoria excluída.");
 }
 
 function connectDemo(id) {
