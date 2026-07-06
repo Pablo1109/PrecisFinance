@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#176b5b" />
+    <meta
+      name="description"
+      content="Precis Finance: controle financeiro pessoal com contas, cartoes, orcamentos, metas, relatorios, offline e exportacao."
+    />
+    <title>Precis Finance</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Menu principal">
+        <a class="brand" href="#/dashboard" aria-label="Precis Finance">
+          <img src="assets/icon.svg" alt="" class="brand-mark" />
+          <span>
+            <strong>Precis Finance</strong>
+            <small>Controle pessoal</small>
+          </span>
+        </a>
+
+        <nav class="main-nav" id="mainNav" aria-label="Navegacao">
+          <button type="button" data-view="dashboard"><span aria-hidden="true">▦</span> Visão geral</button>
+          <button type="button" data-view="transactions"><span aria-hidden="true">＋</span> Lançamentos</button>
+          <button type="button" data-view="accounts"><span aria-hidden="true">▤</span> Contas</button>
+          <button type="button" data-view="cards"><span aria-hidden="true">▣</span> Cartões</button>
+          <button type="button" data-view="budgets"><span aria-hidden="true">◎</span> Orçamentos</button>
+          <button type="button" data-view="goals"><span aria-hidden="true">◇</span> Metas</button>
+          <button type="button" data-view="reports"><span aria-hidden="true">▥</span> Relatórios</button>
+          <button type="button" data-view="automation"><span aria-hidden="true">↻</span> Automações</button>
+          <button type="button" data-view="security"><span aria-hidden="true">□</span> Segurança</button>
+        </nav>
+
+        <div class="sidebar-summary" id="sidebarSummary"></div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="title-block">
+            <p class="eyebrow">Painel financeiro</p>
+            <h1 id="viewTitle">Visão geral</h1>
+          </div>
+
+          <div class="topbar-actions">
+            <label class="select-label">
+              <span>Mês</span>
+              <select id="periodSelect" aria-label="Selecionar mês"></select>
+            </label>
+            <button class="icon-button" type="button" id="lockButton" title="Bloquear">
+              <span aria-hidden="true">□</span>
+            </button>
+            <button class="primary-action" type="button" id="newTxButton">
+              <span aria-hidden="true">＋</span>
+              Novo lançamento
+            </button>
+          </div>
+        </header>
+
+        <section class="alerts" id="alerts" aria-live="polite"></section>
+        <section class="content" id="content"></section>
+      </main>
+    </div>
+
+    <section class="lock-screen" id="lockScreen" hidden>
+      <form class="lock-panel" id="unlockForm">
+        <img src="assets/icon.svg" alt="" />
+        <h2>Precis Finance</h2>
+        <p>Digite seu PIN para abrir o painel.</p>
+        <input id="unlockPin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN" required />
+        <button type="submit" class="primary-action">Desbloquear</button>
+        <button type="button" class="ghost-action" id="resetEncryptedData">Apagar dados protegidos</button>
+      </form>
+    </section>
+
+    <div id="modalRoot"></div>
+    <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
