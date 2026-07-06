@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "python -m http.server 5173",
     "start": "python -m http.server 5173",
-    "build": "echo Static site ready"
+    "build": "node scripts/build.js"
   },
   "keywords": [
     "financas",
