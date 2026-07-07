@@ -478,7 +478,11 @@ function normalizeState(value) {
     ...value,
     settings: { ...seed.settings, ...(value.settings || {}) },
     accounts: value.accounts || seed.accounts,
-    cards: value.cards || seed.cards,
+    cards: (value.cards || seed.cards).map((card) => ({
+      accountId: "",
+      autoPay: false,
+      ...card
+    })),
     categories: value.categories || seed.categories,
     transactions: value.transactions || seed.transactions,
     budgets: value.budgets || seed.budgets,
@@ -520,8 +524,8 @@ function createSeedState() {
       { id: "acc_usd", name: "Conta dólar", type: "Internacional", currency: "USD", balance: 720, color: "#7d5ab6" }
     ],
     cards: [
-      { id: "card_black", name: "Black final 1020", brand: "Mastercard", limit: 9800, closingDay: 18, dueDay: 26, color: "#13201c" },
-      { id: "card_gold", name: "Gold final 4411", brand: "Visa", limit: 5200, closingDay: 8, dueDay: 16, color: "#b8892e" }
+      { id: "card_black", name: "Black final 1020", brand: "Mastercard", limit: 9800, closingDay: 18, dueDay: 26, color: "#13201c", accountId: "acc_main", autoPay: true },
+      { id: "card_gold", name: "Gold final 4411", brand: "Visa", limit: 5200, closingDay: 8, dueDay: 16, color: "#b8892e", accountId: "acc_main", autoPay: false }
     ],
     categories,
     transactions: [
@@ -577,6 +581,10 @@ function tx(type, date, description, amount, currency, accountId, cardId, catego
 }
 
 function render() {
+  if (runAutoCardPayments()) {
+    // Salva silenciosamente as faturas quitadas automaticamente.
+    persist();
+  }
   const view = getActiveView();
   $("#viewTitle").textContent = routes[view].title;
 
@@ -850,40 +858,12 @@ function renderAccounts(container) {
 }
 
 function renderCards(container) {
-  const month = state.settings.selectedMonth;
   container.innerHTML = `
     <section class="actions-row">
       <button class="primary-action" type="button" id="addCard">＋ Novo cartão</button>
     </section>
     <section class="card-grid">
-      ${state.cards
-        .map((card) => {
-          const spent = cardSpent(card.id, month);
-          const outstanding = cardOutstanding(card.id, month);
-          const percent = Math.min(100, (spent / card.limit) * 100);
-          return `
-            <article class="item-card">
-              <div class="item-title">
-                <div>
-                  <span class="inline-group"><span class="swatch" style="background:${card.color}"></span><strong>${escapeHtml(card.name)}</strong></span>
-                  <p class="muted">${escapeHtml(card.brand)} · fecha dia ${card.closingDay} · vence dia ${card.dueDay}</p>
-                </div>
-                <span class="pill ${percent >= 80 ? "danger" : percent >= 50 ? "warn" : ""}">${Math.round(percent)}%</span>
-              </div>
-              <div>
-                <strong>${money(outstanding)}</strong>
-                <p class="muted">Fatura aberta · ${money(spent)} em compras · ${money(Math.max(0, card.limit - spent))} livres</p>
-              </div>
-              <div class="progress ${percent >= 80 ? "danger" : percent >= 50 ? "warn" : ""}" style="--value:${percent}%"><span></span></div>
-              <div class="inline-group">
-                <button class="secondary-action" type="button" data-action="edit-card" data-id="${card.id}">Editar</button>
-                <button class="ghost-action" type="button" data-action="pay-card" data-id="${card.id}" ${outstanding <= 0 ? "disabled" : ""}>Pagar fatura</button>
-                <button class="danger-action" type="button" data-action="delete-card" data-id="${card.id}">Excluir</button>
-              </div>
-            </article>
-          `;
-        })
-        .join("")}
+      ${state.cards.map(renderCardArticle).join("") || emptyState("Nenhum cartão cadastrado.")}
     </section>
   `;
 
@@ -893,8 +873,55 @@ function renderCards(container) {
     if (!button) return;
     if (button.dataset.action === "edit-card") openCardModal(button.dataset.id);
     if (button.dataset.action === "delete-card") deleteCard(button.dataset.id);
-    if (button.dataset.action === "pay-card") payCardInvoice(button.dataset.id);
+    if (button.dataset.action === "pay-card") payCardInvoice(button.dataset.id, button.dataset.month);
   });
+}
+
+function renderCardArticle(card) {
+  const openMonth = openInvoiceMonth(card);
+  const openTotal = cardSpent(card.id, openMonth);
+  const openPaid = cardPayments(card.id, openMonth);
+  const openOutstanding = Math.max(0, openTotal - openPaid);
+  const percent = card.limit ? Math.min(100, (cardCommittedTotal(card.id) / card.limit) * 100) : 0;
+  const free = Math.max(0, card.limit - cardCommittedTotal(card.id));
+  const linkedAccount = card.accountId ? findAccount(card.accountId) : null;
+  const invoices = cardInvoiceList(card, 4);
+  return `
+    <article class="item-card">
+      <div class="item-title">
+        <div>
+          <span class="inline-group"><span class="swatch" style="background:${card.color}"></span><strong>${escapeHtml(card.name)}</strong></span>
+          <p class="muted">${escapeHtml(card.brand)} · fecha dia ${card.closingDay} · vence dia ${card.dueDay}</p>
+          <p class="muted">${linkedAccount ? `Debita em ${escapeHtml(linkedAccount.name)}${card.autoPay ? " · pagamento automático" : ""}` : "Sem conta vinculada"}</p>
+        </div>
+        <span class="pill ${percent >= 80 ? "danger" : percent >= 50 ? "warn" : ""}">${Math.round(percent)}%</span>
+      </div>
+      <div>
+        <strong>${money(openOutstanding)}</strong>
+        <p class="muted">Fatura em aberto (${monthLabel(openMonth)}) · vence ${formatShortDate(invoiceDueDate(card, openMonth))} · ${money(free)} de limite livre</p>
+      </div>
+      <div class="progress ${percent >= 80 ? "danger" : percent >= 50 ? "warn" : ""}" style="--value:${percent}%"><span></span></div>
+      <div class="invoice-list">
+        ${invoices.map((inv) => `
+          <div class="invoice-row ${inv.status}">
+            <div>
+              <strong>${monthLabel(inv.month)}</strong>
+              <p class="muted">${invoiceStatusLabel(inv)} · vence ${formatShortDate(inv.dueDate)}</p>
+            </div>
+            <div class="invoice-values">
+              <strong>${money(inv.outstanding)}</strong>
+              ${inv.paid > 0 ? `<small class="muted">Pago: ${money(inv.paid)} de ${money(inv.total)}</small>` : `<small class="muted">Total: ${money(inv.total)}</small>`}
+            </div>
+            <button class="ghost-action" type="button" data-action="pay-card" data-id="${card.id}" data-month="${inv.month}" ${inv.outstanding <= 0 ? "disabled" : ""}>${inv.outstanding <= 0 ? "Paga" : "Pagar"}</button>
+          </div>
+        `).join("")}
+      </div>
+      <div class="inline-group">
+        <button class="secondary-action" type="button" data-action="edit-card" data-id="${card.id}">Editar</button>
+        <button class="danger-action" type="button" data-action="delete-card" data-id="${card.id}">Excluir</button>
+      </div>
+    </article>
+  `;
 }
 
 function renderBudgets(container) {
@@ -1368,6 +1395,7 @@ function openTransactionModal(transactionId = "") {
         Repetir mensalmente
       </label>
       <p class="field full muted" id="installmentHint">No crédito, informe a data da compra. O app contabiliza a despesa no vencimento do cartão; se parcelar, cria uma parcela por mês.</p>
+      <p class="field full muted" id="invoiceHint" hidden></p>
     </form>
   `, async (form) => {
     const data = Object.fromEntries(new FormData(form).entries());
@@ -1441,6 +1469,30 @@ function openTransactionModal(transactionId = "") {
   const installmentField = $("#installmentField", $("#modalRoot"));
   const installmentHint = $("#installmentHint", $("#modalRoot"));
 
+  const invoiceHint = $("#invoiceHint", $("#modalRoot"));
+  const cardSelect = $("select[name=cardId]", $("#modalRoot"));
+  const dateInput = $("input[name=date]", $("#modalRoot"));
+
+  const refreshInvoiceHint = () => {
+    const isCredit = typeSelect.value === "expense" && paymentMethodSelect.value === "credit";
+    const card = isCredit && cardSelect.value ? findCard(cardSelect.value) : null;
+    if (!card || !dateInput.value) {
+      invoiceHint.hidden = true;
+      invoiceHint.textContent = "";
+      return;
+    }
+    const invoiceMonth = invoiceMonthForPurchase(dateInput.value, card);
+    const dueDate = invoiceDueDate(card, invoiceMonth);
+    const linked = card.accountId ? findAccount(card.accountId) : null;
+    const debitInfo = linked
+      ? (card.autoPay
+          ? `debitará automaticamente de ${linked.name} em ${formatShortDate(dueDate)}.`
+          : `pagamento manual sai de ${linked.name}.`)
+      : "vincule uma conta ao cartão para debitar automaticamente.";
+    invoiceHint.textContent = `Esta compra entra na fatura de ${monthLabel(invoiceMonth)} (vence ${formatShortDate(dueDate)}) — ${debitInfo}`;
+    invoiceHint.hidden = false;
+  };
+
   const refreshPaymentFields = () => {
     const isExpense = typeSelect.value === "expense";
     const isCredit = isExpense && paymentMethodSelect.value === "credit";
@@ -1449,7 +1501,11 @@ function openTransactionModal(transactionId = "") {
     cardField.hidden = !isCredit;
     installmentField.hidden = !isCredit;
     installmentHint.hidden = !isCredit;
+    refreshInvoiceHint();
   };
+
+  cardSelect.addEventListener("change", refreshInvoiceHint);
+  dateInput.addEventListener("change", refreshInvoiceHint);
 
   const refreshCategories = () => {
     const available = state.categories.filter((category) => category.type === typeSelect.value || typeSelect.value === "transfer");
@@ -1532,7 +1588,10 @@ function openAccountModal(accountId = "") {
 
 function openCardModal(cardId = "") {
   const existing = cardId ? findCard(cardId) : null;
-  const model = existing || { name: "", brand: "Visa", limit: 3000, closingDay: 10, dueDay: 18, color: "#13201c" };
+  const model = existing || {
+    name: "", brand: "Visa", limit: 3000, closingDay: 10, dueDay: 18,
+    color: "#13201c", accountId: state.accounts[0]?.id || "", autoPay: true
+  };
 
   openModal(existing ? "Editar cartão" : "Novo cartão", `
     <form id="modalForm" class="form-grid">
@@ -1549,17 +1608,29 @@ function openCardModal(cardId = "") {
         <input name="limit" inputmode="decimal" value="${formatInputAmount(model.limit)}" required />
       </label>
       <label class="field">
-        Fechamento
+        Fechamento (dia)
         <input name="closingDay" type="number" min="1" max="31" value="${model.closingDay}" required />
       </label>
       <label class="field">
-        Vencimento
+        Vencimento (dia)
         <input name="dueDay" type="number" min="1" max="31" value="${model.dueDay}" required />
+      </label>
+      <label class="field">
+        Conta de débito da fatura
+        <select name="accountId">
+          <option value="">Escolher na hora de pagar</option>
+          ${state.accounts.map((account) => `<option value="${account.id}" ${model.accountId === account.id ? "selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field full inline-group">
+        <input name="autoPay" type="checkbox" ${model.autoPay ? "checked" : ""} />
+        Pagar fatura automaticamente no vencimento (debita da conta acima)
       </label>
       <label class="field">
         Cor
         <input name="color" type="color" value="${model.color}" />
       </label>
+      <p class="field full muted">O saldo da conta só é debitado quando a fatura vence. Compras no cartão ficam separadas em cada fatura mensal.</p>
     </form>
   `, (form) => {
     const data = Object.fromEntries(new FormData(form).entries());
@@ -1570,8 +1641,14 @@ function openCardModal(cardId = "") {
       limit: parseAmount(data.limit),
       closingDay: Number(data.closingDay),
       dueDay: Number(data.dueDay),
-      color: data.color
+      color: data.color,
+      accountId: data.accountId || "",
+      autoPay: data.autoPay === "on"
     };
+    if (next.autoPay && !next.accountId) {
+      toast("Para pagar automaticamente, escolha uma conta de débito.");
+      return false;
+    }
     if (existing) state.cards = state.cards.map((card) => (card.id === existing.id ? next : card));
     else state.cards.push(next);
     persistAndRender("Cartão salvo.");
@@ -1927,33 +2004,74 @@ function deleteCard(id) {
   persistAndRender("Cartão excluído.");
 }
 
-function payCardInvoice(cardId) {
+function payCardInvoice(cardId, month) {
   const card = findCard(cardId);
-  const account = state.accounts.find((item) => item.currency === state.settings.baseCurrency) || state.accounts[0];
-  const amount = cardOutstanding(cardId, state.settings.selectedMonth);
-  if (!card || !account || amount <= 0) return;
+  if (!card) return;
+  const invoiceMonth = month || openInvoiceMonth(card);
+  const amount = cardOutstanding(cardId, invoiceMonth);
+  if (amount <= 0) {
+    toast("Fatura já quitada.");
+    return;
+  }
+  const account = (card.accountId && findAccount(card.accountId))
+    || state.accounts.find((item) => item.currency === state.settings.baseCurrency)
+    || state.accounts[0];
+  if (!account) {
+    toast("Cadastre uma conta antes de pagar a fatura.");
+    return;
+  }
+  const dueDate = invoiceDueDate(card, invoiceMonth);
+  const paymentDate = dueDate <= today() ? dueDate : today();
+  registerCardInvoicePayment(card, account, invoiceMonth, amount, paymentDate, false);
+  persistAndRender(`Pagamento de ${money(amount)} registrado em ${escapeHtml(account.name)}.`);
+}
 
+function registerCardInvoicePayment(card, account, invoiceMonth, amount, dateStr, auto) {
   const payment = {
     id: uid("tx"),
     type: "transfer",
-    date: today(),
-    description: `Pagamento fatura ${card.name}`,
+    date: dateStr,
+    description: `Pagamento fatura ${card.name} (${monthLabel(invoiceMonth)})`,
     amount,
     currency: state.settings.baseCurrency,
     accountId: account.id,
     cardId: card.id,
     categoryId: "",
     subcategory: "",
-    tags: "cartao",
+    tags: auto ? "cartao,auto" : "cartao",
     location: "",
-    note: "Baixa de fatura sem duplicar despesa no relatório.",
+    note: auto ? "Pagamento automático da fatura no vencimento." : "Baixa de fatura sem duplicar despesa no relatório.",
     recurring: false,
     attachmentName: "",
+    invoiceMonth,
+    autoPayment: !!auto,
     createdAt: new Date().toISOString()
   };
   state.transactions.unshift(payment);
   applyTransactionImpact(payment, 1);
-  persistAndRender("Pagamento de fatura registrado.");
+  return payment;
+}
+
+function runAutoCardPayments() {
+  if (!state || !Array.isArray(state.cards)) return false;
+  let changed = false;
+  const todayStr = today();
+  state.cards.forEach((card) => {
+    if (!card.autoPay || !card.accountId) return;
+    const account = findAccount(card.accountId);
+    if (!account) return;
+    // Percorre até 12 meses passados procurando faturas vencidas em aberto.
+    for (let offset = -12; offset <= 0; offset += 1) {
+      const invoiceMonth = shiftMonth(state.settings.selectedMonth, offset);
+      const dueDate = invoiceDueDate(card, invoiceMonth);
+      if (dueDate > todayStr) continue;
+      const outstanding = cardOutstanding(card.id, invoiceMonth);
+      if (outstanding <= 0.005) continue;
+      registerCardInvoicePayment(card, account, invoiceMonth, outstanding, dueDate, true);
+      changed = true;
+    }
+  });
+  return changed;
 }
 
 function deleteBudget(id) {
@@ -2453,6 +2571,79 @@ function addMonthsToDate(value, delta) {
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(day, lastDay));
   return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+}
+
+function invoiceMonthForPurchase(purchaseDate, card) {
+  return nextCardDueDate(purchaseDate, card).slice(0, 7);
+}
+
+function invoiceDueDate(card, month) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const dueDay = Math.max(1, Math.min(31, Number(card.dueDay) || 1));
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+  const day = Math.min(dueDay, lastDay);
+  return `${year}-${String(monthIndex).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function invoiceClosingDate(card, month) {
+  // Fatura que vence em `month` fecha no ciclo anterior.
+  const dueDay = Math.max(1, Math.min(31, Number(card.dueDay) || 1));
+  const closingDay = Math.max(1, Math.min(31, Number(card.closingDay) || 1));
+  const closingMonth = closingDay < dueDay ? month : shiftMonth(month, -1);
+  const [year, monthIndex] = closingMonth.split("-").map(Number);
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+  const day = Math.min(closingDay, lastDay);
+  return `${year}-${String(monthIndex).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function openInvoiceMonth(card) {
+  // Compra hoje entra em qual fatura?
+  return invoiceMonthForPurchase(today(), card);
+}
+
+function cardCommittedTotal(cardId) {
+  // Soma tudo que ainda não foi pago (faturas em aberto no futuro).
+  return state.transactions
+    .filter((t) => t.type === "expense" && t.cardId === cardId)
+    .reduce((sum, t) => sum + convertToBase(t.amount, t.currency), 0)
+    - state.transactions
+      .filter((t) => t.type === "transfer" && t.cardId === cardId)
+      .reduce((sum, t) => sum + convertToBase(t.amount, t.currency), 0);
+}
+
+function cardInvoiceList(card, count = 4) {
+  const open = openInvoiceMonth(card);
+  const months = [];
+  for (let offset = -2; offset < count - 2; offset += 1) {
+    months.push(shiftMonth(open, offset));
+  }
+  const todayStr = today();
+  return months.map((month) => {
+    const total = cardSpent(card.id, month);
+    const paid = cardPayments(card.id, month);
+    const outstanding = Math.max(0, total - paid);
+    const dueDate = invoiceDueDate(card, month);
+    const closingDate = invoiceClosingDate(card, month);
+    let status = "future";
+    if (paid > 0 && outstanding <= 0.005) status = "paid";
+    else if (dueDate < todayStr && outstanding > 0) status = "overdue";
+    else if (closingDate <= todayStr) status = "closed";
+    else if (month === open) status = "open";
+    return { month, total, paid, outstanding, dueDate, closingDate, status };
+  });
+}
+
+function invoiceStatusLabel(inv) {
+  if (inv.status === "paid") return "Paga";
+  if (inv.status === "overdue") return "Vencida";
+  if (inv.status === "closed") return "Fechada";
+  if (inv.status === "open") return "Aberta";
+  return "Prevista";
+}
+
+function formatShortDate(value) {
+  if (!value) return "-";
+  return parseLocalDate(value).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
 function nextCardDueDate(purchaseDate, card) {
