@@ -1083,7 +1083,7 @@ function transactionListItem(transaction) {
 
 function transactionRow(transaction) {
   const category = findCategory(transaction.categoryId);
-  const payment = transaction.cardId ? findCard(transaction.cardId)?.name : findAccount(transaction.accountId)?.name;
+  const payment = paymentDisplay(transaction);
   return `
     <tr>
       <td>${DATE_FORMATTER.format(parseLocalDate(transaction.date))}</td>
@@ -1239,6 +1239,7 @@ function openTransactionModal(transactionId = "") {
     currency: state.settings.baseCurrency,
     accountId: state.accounts[0]?.id || "",
     cardId: "",
+    paymentMethod: existing?.paymentMethod || (existing?.cardId ? "credit" : "pix"),
     categoryId: state.categories.find((category) => category.type === "expense")?.id || "",
     subcategory: "",
     tags: "",
@@ -1272,8 +1273,10 @@ function openTransactionModal(transactionId = "") {
         <input name="amount" inputmode="decimal" value="${formatInputAmount(model.amount)}" required />
       </label>
       <label class="field">
-        Parcelas
-        <input name="installments" id="txInstallments" type="number" min="1" max="60" value="${existing?.installmentTotal || 1}" ${existing?.installmentGroupId ? "disabled" : ""} />
+        Forma de pagamento
+        <select name="paymentMethod" id="paymentMethod">
+          ${paymentMethodOptions(model)}
+        </select>
       </label>
       <label class="field">
         Moeda
@@ -1281,19 +1284,23 @@ function openTransactionModal(transactionId = "") {
           ${currencyOptions(model.currency)}
         </select>
       </label>
-      <label class="field">
+      <label class="field" id="paymentAccountField">
         Conta
         <select name="accountId">
           <option value="">Sem conta</option>
           ${state.accounts.map((account) => `<option value="${account.id}" ${model.accountId === account.id ? "selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}
         </select>
       </label>
-      <label class="field">
+      <label class="field" id="paymentCardField">
         Cartão
         <select name="cardId">
           <option value="">Sem cartão</option>
           ${state.cards.map((card) => `<option value="${card.id}" ${model.cardId === card.id ? "selected" : ""}>${escapeHtml(card.name)}</option>`).join("")}
         </select>
+      </label>
+      <label class="field" id="installmentField">
+        Parcelas
+        <input name="installments" id="txInstallments" type="number" min="1" max="60" value="${existing?.installmentTotal || 1}" ${existing?.installmentGroupId ? "disabled" : ""} />
       </label>
       <label class="field">
         Categoria
@@ -1323,22 +1330,30 @@ function openTransactionModal(transactionId = "") {
         <input name="recurring" type="checkbox" ${model.recurring ? "checked" : ""} />
         Repetir mensalmente
       </label>
-      <p class="field full muted" id="installmentHint">Para compra parcelada, informe o valor total e escolha um cartão. O app cria uma parcela por mês.</p>
+      <p class="field full muted" id="installmentHint">No crédito, informe a data da compra. O app contabiliza a despesa no vencimento do cartão; se parcelar, cria uma parcela por mês.</p>
     </form>
   `, async (form) => {
     const data = Object.fromEntries(new FormData(form).entries());
     const file = form.elements.attachment.files[0];
     const installments = existing ? 1 : Math.max(1, Math.min(60, Number(data.installments) || 1));
+    const rawType = data.type;
+    const paymentMethod = rawType === "expense" ? data.paymentMethod : "account";
+    const cardId = paymentMethod === "credit" ? data.cardId : "";
+    const accountId = paymentMethod === "credit" ? "" : data.accountId;
+    const card = cardId ? findCard(cardId) : null;
+    const accountingDate = !existing && paymentMethod === "credit" && card ? nextCardDueDate(data.date, card) : data.date;
     const next = {
       ...model,
       id: existing?.id || uid("tx"),
-      type: data.type,
-      date: data.date,
+      type: rawType,
+      date: accountingDate,
+      purchaseDate: paymentMethod === "credit" ? data.date : "",
       description: data.description.trim(),
       amount: parseAmount(data.amount),
       currency: data.currency,
-      accountId: data.accountId,
-      cardId: data.cardId,
+      accountId,
+      cardId,
+      paymentMethod,
       categoryId: data.categoryId,
       subcategory: data.subcategory,
       tags: data.tags,
@@ -1356,9 +1371,19 @@ function openTransactionModal(transactionId = "") {
       return false;
     }
 
-    if (!existing && installments > 1) {
-      if (next.type !== "expense" || !next.cardId) {
-        toast("Compra parcelada precisa ser uma despesa no cartão.");
+    if (next.type === "expense" && paymentMethod !== "credit" && !next.accountId) {
+      toast("Escolha a conta usada nesse pagamento.");
+      return false;
+    }
+
+    if (next.type === "expense" && paymentMethod === "credit" && !next.cardId) {
+      toast("Escolha o cartão de crédito.");
+      return false;
+    }
+
+    if (!existing && paymentMethod === "credit" && installments > 1) {
+      if (next.type !== "expense") {
+        toast("Compra parcelada precisa ser uma despesa.");
         return false;
       }
       createInstallmentPurchase(next, installments);
@@ -1373,6 +1398,21 @@ function openTransactionModal(transactionId = "") {
   const categorySelect = $("#txCategory", $("#modalRoot"));
   const subcategorySelect = $("#txSubcategory", $("#modalRoot"));
   const descriptionInput = $("#txDescription", $("#modalRoot"));
+  const paymentMethodSelect = $("#paymentMethod", $("#modalRoot"));
+  const accountField = $("#paymentAccountField", $("#modalRoot"));
+  const cardField = $("#paymentCardField", $("#modalRoot"));
+  const installmentField = $("#installmentField", $("#modalRoot"));
+  const installmentHint = $("#installmentHint", $("#modalRoot"));
+
+  const refreshPaymentFields = () => {
+    const isExpense = typeSelect.value === "expense";
+    const isCredit = isExpense && paymentMethodSelect.value === "credit";
+    paymentMethodSelect.closest(".field").hidden = !isExpense;
+    accountField.hidden = isCredit;
+    cardField.hidden = !isCredit;
+    installmentField.hidden = !isCredit;
+    installmentHint.hidden = !isCredit;
+  };
 
   const refreshCategories = () => {
     const available = state.categories.filter((category) => category.type === typeSelect.value || typeSelect.value === "transfer");
@@ -1388,7 +1428,11 @@ function openTransactionModal(transactionId = "") {
       .join("");
   };
 
-  typeSelect.addEventListener("change", refreshCategories);
+  typeSelect.addEventListener("change", () => {
+    refreshCategories();
+    refreshPaymentFields();
+  });
+  paymentMethodSelect.addEventListener("change", refreshPaymentFields);
   categorySelect.addEventListener("change", refreshSubcategories);
   descriptionInput.addEventListener("blur", () => {
     if (!state.settings.autoCategorization || !descriptionInput.value.trim()) return;
@@ -1400,6 +1444,7 @@ function openTransactionModal(transactionId = "") {
   });
 
   refreshCategories();
+  refreshPaymentFields();
 }
 
 function openAccountModal(accountId = "") {
@@ -1807,6 +1852,7 @@ function deleteTransaction(id) {
 }
 
 function applyTransactionImpact(transaction, direction) {
+  if (transaction.date > today()) return;
   const account = findAccount(transaction.accountId);
   if (!account) return;
   if (transaction.type === "income") account.balance += transaction.amount * direction;
@@ -2425,6 +2471,18 @@ function addMonthsToDate(value, delta) {
   return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 }
 
+function nextCardDueDate(purchaseDate, card) {
+  const [year, month, day] = purchaseDate.split("-").map(Number);
+  const dueDay = Math.max(1, Math.min(31, Number(card.dueDay) || day));
+  const closingDay = Math.max(1, Math.min(31, Number(card.closingDay) || day));
+  let monthOffset = day > closingDay ? 1 : 0;
+  if (dueDay <= closingDay) monthOffset += 1;
+  const base = new Date(year, month - 1 + monthOffset, 1);
+  const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+  base.setDate(Math.min(dueDay, lastDay));
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+}
+
 function lastMonths(month, count) {
   return Array.from({ length: count }, (_, index) => shiftMonth(month, index - count + 1));
 }
@@ -2440,6 +2498,26 @@ function money(value, currency = state?.settings?.baseCurrency || "BRL") {
 function signedMoney(transaction) {
   const sign = transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : "";
   return `${sign}${money(transaction.amount, transaction.currency)}`;
+}
+
+function paymentDisplay(transaction) {
+  if (transaction.cardId) {
+    const card = findCard(transaction.cardId)?.name || "Cartão";
+    return `${paymentMethodLabel(transaction.paymentMethod || "credit")} · ${card}`;
+  }
+  const account = findAccount(transaction.accountId)?.name || "Conta";
+  return `${paymentMethodLabel(transaction.paymentMethod || "account")} · ${account}`;
+}
+
+function paymentMethodLabel(method) {
+  const labels = {
+    cash: "À vista",
+    pix: "Pix",
+    debit: "Débito",
+    account: "Conta",
+    credit: "Crédito"
+  };
+  return labels[method] || "Conta";
 }
 
 function amountClass(type) {
@@ -2472,6 +2550,18 @@ function currencyOptions(selected) {
   return Object.keys(state.settings.rates)
     .map((currency) => `<option value="${currency}" ${selected === currency ? "selected" : ""}>${currency}</option>`)
     .join("");
+}
+
+function paymentMethodOptions(model) {
+  const selected = model.paymentMethod || (model.cardId ? "credit" : "pix");
+  const options = [
+    ["cash", "À vista / dinheiro"],
+    ["pix", "Pix"],
+    ["debit", "Débito"],
+    ["account", "Conta"],
+    ["credit", "Crédito / cartão"]
+  ];
+  return options.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function escapeHtml(value) {
