@@ -873,3 +873,13 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Faturas de cartão */
+.invoice-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.invoice-row { display:grid; grid-template-columns: 1fr auto auto; gap:10px; align-items:center; padding:8px 10px; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.02); }
+.invoice-row.overdue { border-color: rgba(207,79,69,.45); background: rgba(207,79,69,.08); }
+.invoice-row.closed { border-color: rgba(240,184,78,.35); }
+.invoice-row.paid { opacity:.65; }
+.invoice-row .invoice-values { text-align:right; display:flex; flex-direction:column; }
+.invoice-row p { margin:0; font-size:12px; }
+.invoice-row strong { font-size:14px; }
