@@ -1,7 +1,7 @@
 {
   "name": "Precis Finance",
   "short_name": "Precis",
-  "description": "Controle financeiro pessoal com login em nuvem, orcamentos, metas, cartoes e relatorios.",
+  "description": "Controle financeiro pessoal com login em nuvem, orçamentos, metas, cartões e relatórios.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f6f7fb",
@@ -9,9 +9,21 @@
   "icons": [
     {
       "src": "assets/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ]
 }
