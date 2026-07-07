@@ -833,7 +833,7 @@ function renderTransactions(container) {
 function renderAccounts(container) {
   container.innerHTML = `
     <section class="actions-row">
-      <button class="primary-action" type="button" id="addAccount">＋ Nova conta</button>
+      <button class="primary-action" type="button" id="addAccount">+ Nova conta</button>
       <button class="secondary-action" type="button" id="newTransfer">↔ Transferir</button>
       <label class="secondary-action" for="statementInput">Importar extrato CSV</label>
       <input id="statementInput" type="file" accept=".csv,text/csv" hidden />
@@ -862,7 +862,7 @@ function renderAccounts(container) {
 function renderCards(container) {
   container.innerHTML = `
     <section class="actions-row">
-      <button class="primary-action" type="button" id="addCard">＋ Novo cartão</button>
+      <button class="primary-action" type="button" id="addCard">+ Novo cartão</button>
     </section>
     <section class="card-grid">
       ${state.cards.map(renderCardArticle).join("") || emptyState("Nenhum cartão cadastrado.")}
@@ -932,7 +932,7 @@ function renderBudgets(container) {
 
   container.innerHTML = `
     <section class="actions-row">
-      <button class="primary-action" type="button" id="addBudget">＋ Novo orçamento</button>
+      <button class="primary-action" type="button" id="addBudget">+ Novo orçamento</button>
       <button class="secondary-action" type="button" id="copyBudgets">Copiar mês anterior</button>
     </section>
     <section class="card-grid">
@@ -953,7 +953,7 @@ function renderBudgets(container) {
 function renderGoals(container) {
   container.innerHTML = `
     <section class="actions-row">
-      <button class="primary-action" type="button" id="addGoal">＋ Nova meta</button>
+      <button class="primary-action" type="button" id="addGoal">+ Nova meta</button>
     </section>
     <section class="card-grid">
       ${state.goals.length ? state.goals.map(goalCard).join("") : emptyState("Nenhuma meta criada.")}
