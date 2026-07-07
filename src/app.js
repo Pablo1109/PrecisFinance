@@ -11,7 +11,7 @@ const routes = {
   budgets: { title: "Orçamentos", render: renderBudgets },
   goals: { title: "Metas", render: renderGoals },
   reports: { title: "Relatórios", render: renderReports },
-  automation: { title: "Automações", render: renderAutomation },
+  automation: { title: "Recorrências", render: renderAutomation },
   security: { title: "Segurança", render: renderSecurity }
 };
 
@@ -77,6 +77,23 @@ function bindShellEvents() {
     if (state) render();
   });
 
+  window.addEventListener("error", (event) => {
+    console.error("[precis] Erro não tratado:", event.error || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("[precis] Promise rejeitada:", event.reason);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
+    const tag = (event.target && event.target.tagName) || "";
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (event.target && event.target.isContentEditable)) return;
+    if (event.key === "n" && !event.ctrlKey && !event.metaKey && !event.altKey && state) {
+      event.preventDefault();
+      openTransactionModal();
+    }
+  });
+
   window.addEventListener("online", () => {
     if (state && currentUser && syncStatus !== "sincronizado") {
       saveCloudState().then(() => {
@@ -123,6 +140,11 @@ async function initCloudAuth() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session?.user && session.user.id !== currentUser?.id) {
         await loadUserSession(session.user);
+      }
+      if (event === "TOKEN_REFRESHED" && !session) {
+        // Refresh falhou: força novo login em vez de falhar em silêncio.
+        clearSessionState();
+        showAuthScreen("Sua sessão expirou. Entre novamente.");
       }
       if (event === "SIGNED_OUT") {
         clearSessionState();
@@ -381,7 +403,13 @@ async function saveCloudState() {
     } catch (error) {
       syncStatus = "pendente";
       console.error("[precis] Falha ao salvar na nuvem:", error);
-      toast("Não foi possível salvar na nuvem agora. Suas edições ficam salvas neste dispositivo e serão reenviadas.");
+      const status = error?.status || error?.code;
+      if (status === 401 || status === "PGRST301" || /jwt|token/i.test(String(error?.message || ""))) {
+        toast("Sessão expirada. Faça login novamente.");
+        try { await supabaseClient.auth.signOut(); } catch (_) {}
+      } else {
+        toast("Não foi possível salvar na nuvem agora. Suas edições ficam salvas neste dispositivo e serão reenviadas.");
+      }
     } finally {
       saveInFlight = null;
       if (pendingSave) {
@@ -456,7 +484,7 @@ function normalizeState(value) {
     budgets: value.budgets || seed.budgets,
     goals: value.goals || seed.goals,
     rules: value.rules || seed.rules,
-    connections: value.connections || seed.connections
+    schemaVersion: value.schemaVersion || 1
   };
 }
 
@@ -478,6 +506,7 @@ function createSeedState() {
   ];
 
   return {
+    schemaVersion: 1,
     settings: {
       selectedMonth: month,
       baseCurrency: "BRL",
@@ -522,11 +551,6 @@ function createSeedState() {
       { id: "rule_ifood", keyword: "ifood", categoryId: "cat_food", subcategory: "Delivery" },
       { id: "rule_mercado", keyword: "supermercado", categoryId: "cat_food", subcategory: "Supermercado" },
       { id: "rule_netflix", keyword: "streaming", categoryId: "cat_subs", subcategory: "Streaming" }
-    ],
-    connections: [
-      { id: "conn_nu", name: "Nubank", kind: "Open Finance", status: "demo", lastSync: "" },
-      { id: "conn_itau", name: "Itaú", kind: "Open Finance", status: "disconnected", lastSync: "" },
-      { id: "conn_inter", name: "Banco Inter", kind: "Open Finance", status: "disconnected", lastSync: "" }
     ]
   };
 }
@@ -799,7 +823,6 @@ function renderTransactions(container) {
 }
 
 function renderAccounts(container) {
-  const base = state.settings.baseCurrency;
   container.innerHTML = `
     <section class="actions-row">
       <button class="primary-action" type="button" id="addAccount">＋ Nova conta</button>
@@ -812,35 +835,6 @@ function renderAccounts(container) {
       ${state.accounts.map(accountCard).join("")}
     </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Conexões bancárias</h2>
-          <p>Conectores em modo demonstrativo para planejar a integração real.</p>
-        </div>
-        <span class="pill neutral">Base ${base}</span>
-      </div>
-      <div class="card-grid">
-        ${state.connections
-          .map((connection) => `
-            <article class="item-card">
-              <div class="item-title">
-                <div>
-                  <strong>${escapeHtml(connection.name)}</strong>
-                  <p class="muted">${escapeHtml(connection.kind)}</p>
-                </div>
-                <span class="pill ${connection.status === "disconnected" ? "neutral" : ""}">${connection.status === "disconnected" ? "desconectado" : "demo"}</span>
-              </div>
-              <small class="muted">Última sincronização: ${connection.lastSync ? escapeHtml(connection.lastSync) : "nunca"}</small>
-              <div class="inline-group">
-                <button class="secondary-action" type="button" data-action="connect-demo" data-id="${connection.id}">Conectar demo</button>
-                <button class="ghost-action" type="button" data-action="sync-demo" data-id="${connection.id}">Sincronizar</button>
-              </div>
-            </article>
-          `)
-          .join("")}
-      </div>
-    </section>
   `;
 
   $("#addAccount", container).addEventListener("click", () => openAccountModal());
@@ -852,8 +846,6 @@ function renderAccounts(container) {
     if (!button) return;
     if (button.dataset.action === "edit-account") openAccountModal(button.dataset.id);
     if (button.dataset.action === "delete-account") deleteAccount(button.dataset.id);
-    if (button.dataset.action === "connect-demo") connectDemo(button.dataset.id);
-    if (button.dataset.action === "sync-demo") syncDemo(button.dataset.id);
   });
 }
 
@@ -1022,31 +1014,13 @@ function renderAutomation(container) {
       <article class="panel">
         <div class="panel-header">
           <div>
-            <h2>Notificações e SMS</h2>
-            <p>Cole alertas bancários para transformar em lançamentos.</p>
+            <h2>Regras de categorização</h2>
+            <p>Palavras-chave usadas para sugerir categoria em novos lançamentos e importações de CSV.</p>
           </div>
-        </div>
-        <label class="field">
-          Alertas recebidos
-          <textarea id="notificationText" placeholder="Compra aprovada R$ 45,90 Supermercado&#10;PIX recebido R$ 120,00 Cliente"></textarea>
-        </label>
-        <div class="inline-group" style="margin-top:12px">
-          <button class="primary-action" type="button" id="parseNotifications">Importar alertas</button>
           <button class="secondary-action" type="button" id="addRule">Nova regra</button>
         </div>
+        ${state.rules.length ? `<div class="card-grid">${state.rules.map(ruleCard).join("")}</div>` : emptyState("Nenhuma regra cadastrada.")}
       </article>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Regras inteligentes</h2>
-          <p>Palavras-chave usadas para sugerir categoria e subcategoria.</p>
-        </div>
-      </div>
-      <div class="card-grid">
-        ${state.rules.map(ruleCard).join("")}
-      </div>
     </section>
 
     <section class="panel">
@@ -1064,7 +1038,6 @@ function renderAutomation(container) {
   `;
 
   $("#processRecurring", container).addEventListener("click", processRecurringForMonth);
-  $("#parseNotifications", container).addEventListener("click", () => importNotifications($("#notificationText", container).value));
   $("#addRule", container).addEventListener("click", () => openRuleModal());
   $("#addCategory", container).addEventListener("click", () => openCategoryModal());
   container.addEventListener("click", (event) => {
@@ -1111,7 +1084,7 @@ function renderSecurity(container) {
     </section>
 
     <section class="notice-band">
-      Login e sincronizacao usam Supabase Auth e a tabela finance_states com regras de seguranca por usuario. Open Finance produtivo e leitura automatica de SMS ainda exigem integracoes externas especificas.
+      Login e sincronização usam Supabase Auth e a tabela finance_states com regras de segurança por usuário. Os dados são salvos automaticamente na nuvem e cacheados neste dispositivo para uso offline.
     </section>
   `;
 
@@ -1857,6 +1830,16 @@ function openModal(title, bodyHtml, onSubmit) {
 }
 
 function upsertTransaction(next, existing = null) {
+  const amount = Number(next.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    toast("Informe um valor válido maior que zero.");
+    return;
+  }
+  next.amount = Math.round(amount * 100) / 100;
+  if (!next.date || Number.isNaN(new Date(next.date).getTime())) {
+    toast("Data inválida.");
+    return;
+  }
   if (existing) {
     applyTransactionImpact(existing, -1);
     state.transactions = state.transactions.map((transaction) => (transaction.id === existing.id ? next : transaction));
@@ -2003,6 +1986,7 @@ function deleteGoal(id) {
 }
 
 function deleteRule(id) {
+  if (!confirm("Excluir esta regra?")) return;
   state.rules = state.rules.filter((rule) => rule.id !== id);
   persistAndRender("Regra excluída.");
 }
@@ -2022,22 +2006,6 @@ function deleteCategory(id) {
   if (!confirm(`Excluir a categoria "${category.name}"?`)) return;
   state.categories = state.categories.filter((item) => item.id !== id);
   persistAndRender("Categoria excluída.");
-}
-
-function connectDemo(id) {
-  const connection = state.connections.find((item) => item.id === id);
-  if (!connection) return;
-  connection.status = "demo";
-  connection.lastSync = new Date().toLocaleString("pt-BR");
-  persistAndRender("Conector demo ativado.");
-}
-
-function syncDemo(id) {
-  const connection = state.connections.find((item) => item.id === id);
-  if (!connection) return;
-  connection.status = "demo";
-  connection.lastSync = new Date().toLocaleString("pt-BR");
-  persistAndRender("Sincronização demonstrativa concluída.");
 }
 
 function processRecurringForMonth() {
@@ -2062,63 +2030,6 @@ function processRecurringForMonth() {
   });
 
   persistAndRender(created ? `${created} recorrência(s) processada(s).` : "Nada novo para processar.");
-}
-
-function importNotifications(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  let imported = 0;
-  lines.forEach((line) => {
-    const parsed = parseNotification(line);
-    if (!parsed) return;
-    state.transactions.unshift(parsed);
-    applyTransactionImpact(parsed, 1);
-    imported += 1;
-  });
-
-  persistAndRender(imported ? `${imported} alerta(s) importado(s).` : "Nenhum alerta reconhecido.");
-}
-
-function parseNotification(line) {
-  const amountMatch = line.match(/(?:R\$|BRL)\s*([\d.]+,\d{2}|[\d,]+(?:\.\d{2})?)/i);
-  if (!amountMatch) return null;
-
-  const amount = parseAmount(amountMatch[1]);
-  const lower = line.toLowerCase();
-  const type = /recebid|credito|crédito|deposit|pix recebido/.test(lower) ? "income" : "expense";
-  const suggestion = suggestCategory(line, type);
-  const account = state.accounts.find((item) => item.currency === "BRL") || state.accounts[0];
-
-  return {
-    id: uid("tx"),
-    type,
-    date: today(),
-    description: cleanNotificationDescription(line),
-    amount,
-    currency: "BRL",
-    accountId: account?.id || "",
-    cardId: "",
-    categoryId: suggestion?.categoryId || state.categories.find((category) => category.type === type)?.id || "",
-    subcategory: suggestion?.subcategory || "",
-    tags: "importado",
-    location: "",
-    note: line,
-    recurring: false,
-    attachmentName: "",
-    createdAt: new Date().toISOString()
-  };
-}
-
-function cleanNotificationDescription(line) {
-  return line
-    .replace(/(?:compra aprovada|compra|pix recebido|pagamento recebido|r\$|brl)/gi, "")
-    .replace(/[\d.,]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80) || "Importado por alerta";
 }
 
 function importStatement(file) {
@@ -2243,8 +2154,17 @@ function resetDemo() {
   persistAndRender("Dados resetados e enviados para a nuvem.");
 }
 
-async function persist() {
-  await saveCloudState();
+let persistTimer = null;
+function persist() {
+  // Debounce: agrupa múltiplas edições em uma única chamada à nuvem.
+  if (persistTimer) clearTimeout(persistTimer);
+  return new Promise((resolve) => {
+    persistTimer = setTimeout(async () => {
+      persistTimer = null;
+      await saveCloudState();
+      resolve();
+    }, 400);
+  });
 }
 
 async function persistAndRender(message) {
