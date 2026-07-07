@@ -78,7 +78,11 @@ function bindShellEvents() {
   });
 
   window.addEventListener("online", () => {
-    if (state && currentUser) persistAndRender("Conexão voltou. Dados sincronizados.");
+    if (state && currentUser && syncStatus !== "sincronizado") {
+      saveCloudState().then(() => {
+        if (syncStatus === "sincronizado") toast("Conexão voltou. Dados sincronizados.");
+      });
+    }
   });
 }
 
@@ -203,24 +207,43 @@ async function loadUserSession(user) {
 
     if (error) throw error;
 
-    if (data?.state) {
+    const cloudUpdatedAt = data?.updated_at || "";
+    const cachedUpdatedAt = cached?.updatedAt || "";
+    const cacheIsDirty = cached?.dirty === true;
+    const cacheIsNewer = cached && (cacheIsDirty || (cachedUpdatedAt && cachedUpdatedAt > cloudUpdatedAt));
+
+    if (data?.state && !cacheIsNewer) {
+      // Nuvem é a verdade.
       state = normalizeState(data.state);
-      lastCloudUpdatedAt = data.updated_at || "";
-      cacheCloudState();
+      lastCloudUpdatedAt = cloudUpdatedAt;
+      cacheCloudState(cloudUpdatedAt, false);
       syncStatus = "sincronizado";
+    } else if (cached) {
+      // Cache local é mais novo (ou nuvem vazia): usa e reenvia.
+      state = cached.state;
+      lastCloudUpdatedAt = cloudUpdatedAt;
+      await saveCloudState();
+    } else if (legacy) {
+      state = legacy;
+      await saveCloudState();
     } else {
-      state = cached || legacy || createSeedState();
+      state = createSeedState();
       await saveCloudState();
     }
   } catch (error) {
-    if (cached || legacy) {
-      state = cached || legacy;
+    console.error("[precis] Falha ao carregar dados da nuvem:", error);
+    if (cached) {
+      state = cached.state;
       syncStatus = "pendente";
       toast("Sem acesso ao banco agora. Usando dados salvos neste navegador.");
+    } else if (legacy) {
+      state = legacy;
+      syncStatus = "pendente";
+      toast("Sem acesso ao banco agora. Usando backup local.");
     } else {
       state = createSeedState();
       syncStatus = "erro";
-      toast("Crie a tabela finance_states no Supabase para salvar em nuvem.");
+      toast("Não foi possível acessar o Supabase. Verifique se a tabela finance_states existe e se as políticas RLS estão ativas.");
     }
   }
 
@@ -297,38 +320,78 @@ function loadCachedCloudState(userId) {
   const saved = localStorage.getItem(cloudCacheKey(userId));
   if (!saved) return null;
   try {
-    return normalizeState(JSON.parse(saved));
+    const parsed = JSON.parse(saved);
+    // Compatibilidade com versão antiga (state puro).
+    if (parsed && parsed.state) {
+      return { state: normalizeState(parsed.state), updatedAt: parsed.updatedAt || "", dirty: !!parsed.dirty };
+    }
+    return { state: normalizeState(parsed), updatedAt: "", dirty: false };
   } catch {
     return null;
   }
 }
 
-function cacheCloudState() {
+function cacheCloudState(updatedAt, dirty = false) {
   if (!currentUser || !state) return;
-  localStorage.setItem(cloudCacheKey(), JSON.stringify(state));
+  const payload = { state, updatedAt: updatedAt || lastCloudUpdatedAt || new Date().toISOString(), dirty };
+  try {
+    localStorage.setItem(cloudCacheKey(), JSON.stringify(payload));
+  } catch (error) {
+    console.error("[precis] Falha ao cachear estado local:", error);
+  }
 }
 
-async function saveCloudState() {
-  if (!supabaseClient || !currentUser || !state) return;
-  cacheCloudState();
+let saveInFlight = null;
+let pendingSave = false;
 
-  try {
-    syncStatus = "sincronizando";
-    const updatedAt = new Date().toISOString();
-    const { error } = await supabaseClient.from("finance_states").upsert(
-      {
-        user_id: currentUser.id,
-        state,
-        updated_at: updatedAt
-      },
-      { onConflict: "user_id" }
-    );
-    if (error) throw error;
-    lastCloudUpdatedAt = updatedAt;
-    syncStatus = "sincronizado";
-  } catch {
-    syncStatus = "pendente";
+async function saveCloudState() {
+  if (!currentUser || !state) return;
+  if (!supabaseClient) {
+    // Sem nuvem configurada: ainda assim persiste local para não perder edições.
+    cacheCloudState(new Date().toISOString(), true);
+    syncStatus = "somente local";
+    return;
   }
+
+  if (saveInFlight) {
+    // Se já existe upload em andamento, marca para reenvio ao terminar.
+    pendingSave = true;
+    return saveInFlight;
+  }
+
+  saveInFlight = (async () => {
+    try {
+      syncStatus = "sincronizando";
+      const updatedAt = new Date().toISOString();
+      // Salva localmente ANTES para nunca perder edição mesmo se a rede cair.
+      cacheCloudState(updatedAt, true);
+
+      const { error } = await supabaseClient.from("finance_states").upsert(
+        {
+          user_id: currentUser.id,
+          state,
+          updated_at: updatedAt
+        },
+        { onConflict: "user_id" }
+      );
+      if (error) throw error;
+      lastCloudUpdatedAt = updatedAt;
+      syncStatus = "sincronizado";
+      cacheCloudState(updatedAt, false);
+    } catch (error) {
+      syncStatus = "pendente";
+      console.error("[precis] Falha ao salvar na nuvem:", error);
+      toast("Não foi possível salvar na nuvem agora. Suas edições ficam salvas neste dispositivo e serão reenviadas.");
+    } finally {
+      saveInFlight = null;
+      if (pendingSave) {
+        pendingSave = false;
+        saveCloudState();
+      }
+    }
+  })();
+
+  return saveInFlight;
 }
 
 function subscribeToCloudChanges() {
@@ -350,14 +413,15 @@ function subscribeToCloudChanges() {
       },
       (payload) => {
         const incoming = payload.new;
-        if (!incoming?.state || !incoming.updated_at || incoming.updated_at <= lastCloudUpdatedAt) return;
+        if (!incoming?.state || !incoming.updated_at) return;
+        if (incoming.updated_at <= lastCloudUpdatedAt) return;
         state = normalizeState(incoming.state);
         lastCloudUpdatedAt = incoming.updated_at;
         syncStatus = "sincronizado";
-        cacheCloudState();
+        cacheCloudState(incoming.updated_at, false);
         hydratePeriodSelect();
         render();
-        toast("Dados atualizados pela nuvem.");
+        toast("Dados atualizados pela nuvem em outro dispositivo.");
       }
     )
     .subscribe();
@@ -2634,6 +2698,28 @@ function toast(message) {
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        // Força ativação da nova versão assim que instalada.
+        if (registration.waiting) registration.waiting.postMessage("SKIP_WAITING");
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing;
+          if (!worker) return;
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              worker.postMessage("SKIP_WAITING");
+            }
+          });
+        });
+      })
+      .catch(() => {});
+
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
   });
 }
