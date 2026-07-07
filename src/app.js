@@ -2391,11 +2391,21 @@ async function persistAndRender(message) {
 }
 
 function monthlyTotals(month) {
+  // Fluxo de caixa do mês: considera apenas movimentações que impactam o saldo das contas.
+  // Compras no cartão de crédito NÃO entram como despesa até que a fatura seja paga
+  // (o pagamento da fatura é um "transfer" com cardId e é contabilizado como despesa aqui).
   return getMonthTransactions(month).reduce(
     (acc, transaction) => {
       const value = convertToBase(transaction.amount, transaction.currency);
-      if (transaction.type === "income") acc.income += value;
-      if (transaction.type === "expense") acc.expense += value;
+      if (transaction.type === "income") {
+        acc.income += value;
+      } else if (transaction.type === "expense") {
+        // Ignora despesas lançadas no cartão de crédito — elas só afetam o caixa quando a fatura é paga.
+        if (!transaction.cardId) acc.expense += value;
+      } else if (transaction.type === "transfer" && transaction.cardId) {
+        // Pagamento de fatura de cartão: saída real de caixa no mês do pagamento.
+        acc.expense += value;
+      }
       acc.balance = acc.income - acc.expense;
       return acc;
     },
