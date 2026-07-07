@@ -2011,7 +2011,6 @@ function upsertTransaction(next, existing = null) {
     state.transactions.unshift(next);
   }
   applyTransactionImpact(next, 1);
-  state.settings.selectedMonth = next.date.slice(0, 7);
   persistAndRender(existing ? "Lançamento atualizado." : "Lançamento criado.");
 }
 
@@ -2045,7 +2044,6 @@ function createInstallmentPurchase(baseTransaction, installments) {
   }
 
   state.transactions.unshift(...created.reverse());
-  state.settings.selectedMonth = baseTransaction.date.slice(0, 7);
   persistAndRender(`${installments} parcelas criadas.`);
 }
 
@@ -2304,9 +2302,11 @@ function filteredTransactions(container) {
   const type = $("#txTypeFilter", container).value;
   const category = $("#txCategoryFilter", container).value;
   const payment = $("#txPaymentFilter", container).value;
+  const month = state.settings.selectedMonth;
 
   return state.transactions
     .filter((transaction) => {
+      if (transaction.date.slice(0, 7) !== month) return false;
       const haystack = [transaction.description, transaction.tags, transaction.location, transaction.note, transaction.subcategory].join(" ").toLowerCase();
       const paymentMatch = !payment || (payment.startsWith("acc:") && transaction.accountId === payment.slice(4)) || (payment.startsWith("card:") && transaction.cardId === payment.slice(5));
       return (!search || haystack.includes(search)) && (!type || transaction.type === type) && (!category || transaction.categoryId === category) && paymentMatch;
