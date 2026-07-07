@@ -834,6 +834,7 @@ function renderAccounts(container) {
   container.innerHTML = `
     <section class="actions-row">
       <button class="primary-action" type="button" id="addAccount">＋ Nova conta</button>
+      <button class="secondary-action" type="button" id="newTransfer">↔ Transferir</button>
       <label class="secondary-action" for="statementInput">Importar extrato CSV</label>
       <input id="statementInput" type="file" accept=".csv,text/csv" hidden />
       <button class="secondary-action" type="button" id="editRates">Moedas</button>
@@ -847,6 +848,7 @@ function renderAccounts(container) {
 
   $("#addAccount", container).addEventListener("click", () => openAccountModal());
   $("#editRates", container).addEventListener("click", openRatesModal);
+  $("#newTransfer", container).addEventListener("click", () => openTransferModal());
   $("#statementInput", container).addEventListener("change", (event) => importStatement(event.target.files[0]));
 
   container.addEventListener("click", (event) => {
@@ -1303,6 +1305,8 @@ function openTransactionModal(transactionId = "") {
     currency: state.settings.baseCurrency,
     accountId: state.accounts[0]?.id || "",
     cardId: "",
+    destAccountId: "",
+    destAmount: "",
     paymentMethod: existing?.paymentMethod || (existing?.cardId ? "credit" : "pix"),
     categoryId: state.categories.find((category) => category.type === "expense")?.id || "",
     subcategory: "",
@@ -1349,11 +1353,22 @@ function openTransactionModal(transactionId = "") {
         </select>
       </label>
       <label class="field" id="paymentAccountField">
-        Conta
+        <span id="paymentAccountLabel">Conta</span>
         <select name="accountId">
           <option value="">Sem conta</option>
           ${state.accounts.map((account) => `<option value="${account.id}" ${model.accountId === account.id ? "selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}
         </select>
+      </label>
+      <label class="field" id="destAccountField" hidden>
+        Conta destino
+        <select name="destAccountId">
+          <option value="">Selecione</option>
+          ${state.accounts.map((account) => `<option value="${account.id}" ${model.destAccountId === account.id ? "selected" : ""}>${escapeHtml(account.name)} (${account.currency})</option>`).join("")}
+        </select>
+      </label>
+      <label class="field" id="destAmountField" hidden>
+        Valor recebido (opcional)
+        <input name="destAmount" inputmode="decimal" value="${model.destAmount ? formatInputAmount(model.destAmount) : ""}" placeholder="Se moedas diferentes" />
       </label>
       <label class="field" id="paymentCardField">
         Cartão
@@ -1418,9 +1433,11 @@ function openTransactionModal(transactionId = "") {
       currency: data.currency,
       accountId,
       cardId,
+      destAccountId: rawType === "transfer" ? (data.destAccountId || "") : "",
+      destAmount: rawType === "transfer" && data.destAmount ? parseAmount(data.destAmount) : 0,
       paymentMethod,
-      categoryId: data.categoryId,
-      subcategory: data.subcategory,
+      categoryId: rawType === "transfer" ? "" : data.categoryId,
+      subcategory: rawType === "transfer" ? "" : data.subcategory,
       tags: data.tags,
       location: data.location,
       note: data.note,
@@ -1446,6 +1463,17 @@ function openTransactionModal(transactionId = "") {
       return false;
     }
 
+    if (next.type === "transfer") {
+      if (!next.accountId || !next.destAccountId) {
+        toast("Escolha a conta de origem e de destino.");
+        return false;
+      }
+      if (next.accountId === next.destAccountId) {
+        toast("Origem e destino precisam ser diferentes.");
+        return false;
+      }
+    }
+
     if (!existing && paymentMethod === "credit" && installments > 1) {
       if (next.type !== "expense") {
         toast("Compra parcelada precisa ser uma despesa.");
@@ -1465,6 +1493,10 @@ function openTransactionModal(transactionId = "") {
   const descriptionInput = $("#txDescription", $("#modalRoot"));
   const paymentMethodSelect = $("#paymentMethod", $("#modalRoot"));
   const accountField = $("#paymentAccountField", $("#modalRoot"));
+  const accountLabel = $("#paymentAccountLabel", $("#modalRoot"));
+  const destAccountField = $("#destAccountField", $("#modalRoot"));
+  const destAmountField = $("#destAmountField", $("#modalRoot"));
+  const destAccountSelect = $("select[name=destAccountId]", $("#modalRoot"));
   const cardField = $("#paymentCardField", $("#modalRoot"));
   const installmentField = $("#installmentField", $("#modalRoot"));
   const installmentHint = $("#installmentHint", $("#modalRoot"));
@@ -1472,6 +1504,7 @@ function openTransactionModal(transactionId = "") {
   const invoiceHint = $("#invoiceHint", $("#modalRoot"));
   const cardSelect = $("select[name=cardId]", $("#modalRoot"));
   const dateInput = $("input[name=date]", $("#modalRoot"));
+  const accountSelect = $("select[name=accountId]", $("#modalRoot"));
 
   const refreshInvoiceHint = () => {
     const isCredit = typeSelect.value === "expense" && paymentMethodSelect.value === "credit";
@@ -1493,22 +1526,50 @@ function openTransactionModal(transactionId = "") {
     invoiceHint.hidden = false;
   };
 
+  const refreshTransferHint = () => {
+    if (typeSelect.value !== "transfer") {
+      destAmountField.hidden = true;
+      return;
+    }
+    const from = findAccount(accountSelect.value);
+    const to = findAccount(destAccountSelect.value);
+    destAmountField.hidden = !(from && to && from.currency !== to.currency);
+  };
+
   const refreshPaymentFields = () => {
-    const isExpense = typeSelect.value === "expense";
+    const type = typeSelect.value;
+    const isExpense = type === "expense";
+    const isTransfer = type === "transfer";
     const isCredit = isExpense && paymentMethodSelect.value === "credit";
     paymentMethodSelect.closest(".field").hidden = !isExpense;
     accountField.hidden = isCredit;
+    accountLabel.textContent = isTransfer ? "Conta origem" : "Conta";
+    destAccountField.hidden = !isTransfer;
     cardField.hidden = !isCredit;
     installmentField.hidden = !isCredit;
     installmentHint.hidden = !isCredit;
+    // Categoria/subcategoria não fazem sentido em transferência
+    categorySelect.closest(".field").hidden = isTransfer;
+    subcategorySelect.closest(".field").hidden = isTransfer;
     refreshInvoiceHint();
+    refreshTransferHint();
   };
+
+  cardSelect.addEventListener("change", refreshInvoiceHint);
+  dateInput.addEventListener("change", refreshInvoiceHint);
+  accountSelect.addEventListener("change", refreshTransferHint);
+  destAccountSelect.addEventListener("change", refreshTransferHint);
 
   cardSelect.addEventListener("change", refreshInvoiceHint);
   dateInput.addEventListener("change", refreshInvoiceHint);
 
   const refreshCategories = () => {
-    const available = state.categories.filter((category) => category.type === typeSelect.value || typeSelect.value === "transfer");
+    if (typeSelect.value === "transfer") {
+      categorySelect.innerHTML = "";
+      subcategorySelect.innerHTML = "";
+      return;
+    }
+    const available = state.categories.filter((category) => category.type === typeSelect.value);
     const selected = available.some((category) => category.id === model.categoryId) ? model.categoryId : available[0]?.id || "";
     categorySelect.innerHTML = available.map((category) => `<option value="${category.id}" ${selected === category.id ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("");
     refreshSubcategories();
@@ -1538,6 +1599,32 @@ function openTransactionModal(transactionId = "") {
 
   refreshCategories();
   refreshPaymentFields();
+}
+
+function openTransferModal() {
+  if (state.accounts.length < 2) {
+    toast("Cadastre pelo menos duas contas para transferir.");
+    return;
+  }
+  openTransactionModal();
+  // Após abrir o modal, seleciona o tipo Transferência e atualiza campos
+  requestAnimationFrame(() => {
+    const typeSelect = $("#txType", $("#modalRoot"));
+    if (!typeSelect) return;
+    typeSelect.value = "transfer";
+    typeSelect.dispatchEvent(new Event("change"));
+    const destSelect = $("select[name=destAccountId]", $("#modalRoot"));
+    const srcSelect = $("select[name=accountId]", $("#modalRoot"));
+    if (destSelect && srcSelect) {
+      const other = state.accounts.find((a) => a.id !== srcSelect.value);
+      if (other) {
+        destSelect.value = other.id;
+        destSelect.dispatchEvent(new Event("change"));
+      }
+    }
+    const desc = $("#txDescription", $("#modalRoot"));
+    if (desc && !desc.value) desc.value = "Transferência entre contas";
+  });
 }
 
 function openAccountModal(accountId = "") {
@@ -1978,10 +2065,21 @@ function deleteTransaction(id) {
 function applyTransactionImpact(transaction, direction) {
   if (transaction.date > today()) return;
   const account = findAccount(transaction.accountId);
-  if (!account) return;
-  if (transaction.type === "income") account.balance += transaction.amount * direction;
-  if (transaction.type === "expense" && !transaction.cardId) account.balance -= transaction.amount * direction;
-  if (transaction.type === "transfer") account.balance -= transaction.amount * direction;
+  if (transaction.type === "income" && account) account.balance += transaction.amount * direction;
+  if (transaction.type === "expense" && !transaction.cardId && account) account.balance -= transaction.amount * direction;
+  if (transaction.type === "transfer") {
+    if (account) account.balance -= transaction.amount * direction;
+    // Transferência entre contas: credita a conta destino (converte moeda se necessário)
+    if (transaction.destAccountId) {
+      const dest = findAccount(transaction.destAccountId);
+      if (dest) {
+        const credited = Number(transaction.destAmount) > 0
+          ? Number(transaction.destAmount)
+          : transaction.amount;
+        dest.balance += credited * direction;
+      }
+    }
+  }
 }
 
 function deleteAccount(id) {
@@ -2671,7 +2769,7 @@ function money(value, currency = state?.settings?.baseCurrency || "BRL") {
 }
 
 function signedMoney(transaction) {
-  const sign = transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : "";
+  const sign = transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : "↔ ";
   return `${sign}${money(transaction.amount, transaction.currency)}`;
 }
 
@@ -2679,6 +2777,11 @@ function paymentDisplay(transaction) {
   if (transaction.cardId) {
     const card = findCard(transaction.cardId)?.name || "Cartão";
     return `${paymentMethodLabel(transaction.paymentMethod || "credit")} · ${card}`;
+  }
+  if (transaction.type === "transfer" && transaction.destAccountId) {
+    const from = findAccount(transaction.accountId)?.name || "Conta";
+    const to = findAccount(transaction.destAccountId)?.name || "Conta";
+    return `Transferência · ${from} → ${to}`;
   }
   const account = findAccount(transaction.accountId)?.name || "Conta";
   return `${paymentMethodLabel(transaction.paymentMethod || "account")} · ${account}`;
