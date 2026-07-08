@@ -1,3 +1,5 @@
+import { renderOpenFinance, setOpenFinanceContext } from "./openfinance.js";
+
 const LEGACY_STORAGE_KEY = "precis-finance-state-v1";
 const CLOUD_CACHE_PREFIX = "precis-finance-cloud-cache-v1:";
 const MONTH_FORMATTER = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
@@ -12,7 +14,8 @@ const routes = {
   goals: { title: "Metas", render: renderGoals },
   reports: { title: "Relatórios", render: renderReports },
   automation: { title: "Recorrências", render: renderAutomation },
-  security: { title: "Segurança", render: renderSecurity }
+  security: { title: "Segurança", render: renderSecurity },
+  openfinance: { title: "Open Finance", render: renderOpenFinance }
 };
 
 const categoryColors = ["#176b5b", "#f27d72", "#4267b2", "#f0b84e", "#7d5ab6", "#26966f", "#c35f4d", "#5c7485"];
@@ -127,6 +130,8 @@ async function initCloudAuth() {
         detectSessionInUrl: true
       }
     });
+
+    setOpenFinanceContext({ supabaseClient, showToast: toast });
 
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
