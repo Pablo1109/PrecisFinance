@@ -1,46 +1,21 @@
 // Integração Pluggy no frontend do PrecisFinance.
-// Requer o script do widget no index.html:
-//   <script src="https://cdn.pluggy.ai/pluggy-connect/v2.9.4/pluggy-connect.js"></script>
+//
+// Modelo atual (sem CNPJ): as conexões bancárias ficam no MeuPluggy
+// (meu.pluggy.ai). O Pluggy Demo App (dashboard.pluggy.ai) enxerga esses
+// items via proxy e nossas Edge Functions usam o clientId/clientSecret
+// do Demo App pra listar e sincronizar.
+//
+// -> Adicionar/remover banco: fazer em meu.pluggy.ai (o usuário).
+// -> Sincronizar tudo: botão no app chama pluggy-list-items + pluggy-sync.
 
-// Abre o widget Pluggy Connect para o usuário autorizar um banco.
-// supabaseClient: o client já autenticado do app.
-// opts.itemId (opcional): reabrir uma conexão existente para atualizar/reautorizar.
-// opts.onSuccess({ itemId }): callback após conectar e sincronizar.
-export async function connectBank(supabaseClient, opts = {}) {
-  if (typeof window.PluggyConnect === "undefined") {
-    throw new Error(
-      "Widget Pluggy não carregado. Adicione o <script> do pluggy-connect no index.html.",
-    );
-  }
-
-  // 1) Pega um connectToken da Edge Function (que guarda o clientSecret).
+// Lista os items remotos vistos pelo Pluggy (via Edge Function).
+export async function listRemoteItems(supabaseClient) {
   const { data, error } = await supabaseClient.functions.invoke(
-    "pluggy-connect-token",
-    { body: opts.itemId ? { itemId: opts.itemId } : {} },
+    "pluggy-list-items",
+    { body: {} },
   );
   if (error) throw error;
-  if (!data?.accessToken) throw new Error("connectToken não retornado");
-
-  // 2) Abre o widget.
-  return new Promise((resolve, reject) => {
-    const pluggy = new window.PluggyConnect({
-      connectToken: data.accessToken,
-      includeSandbox: false, // PRODUÇÃO. Troque para true só para testar.
-      onSuccess: async (itemData) => {
-        const itemId = itemData?.item?.id;
-        try {
-          // 3) Dispara a primeira sincronização.
-          if (itemId) await syncItem(supabaseClient, itemId);
-          if (opts.onSuccess) await opts.onSuccess({ itemId });
-          resolve({ itemId });
-        } catch (e) {
-          reject(e);
-        }
-      },
-      onError: (err) => reject(err),
-    });
-    pluggy.init();
-  });
+  return data?.items ?? [];
 }
 
 // Sincroniza um item específico (contas, transações, cartões, investimentos).
@@ -52,13 +27,22 @@ export async function syncItem(supabaseClient, itemId) {
   return data;
 }
 
-// Sincroniza todos os itens conectados do usuário.
+// Sincroniza todos os items visíveis no Pluggy (fonte da verdade = remoto).
+// Retorna { items: N } pro toast.
 export async function syncAll(supabaseClient) {
-  const items = await getPluggyItems(supabaseClient);
-  for (const item of items) {
-    await syncItem(supabaseClient, item.item_id);
+  const remote = await listRemoteItems(supabaseClient);
+  let ok = 0;
+  const errors = [];
+  for (const it of remote) {
+    try {
+      await syncItem(supabaseClient, it.itemId);
+      ok++;
+    } catch (e) {
+      console.error("sync falhou", it.itemId, e);
+      errors.push({ itemId: it.itemId, error: String(e?.message || e) });
+    }
   }
-  return items.length;
+  return { items: ok, total: remote.length, errors };
 }
 
 // ---------------- Leitura dos dados (RLS já filtra por usuário) -------------
@@ -105,11 +89,11 @@ export async function getPluggyInvestments(supabaseClient) {
   return data ?? [];
 }
 
-// Desconecta um banco (apaga o item; contas/transações caem em cascata).
-export async function disconnectItem(supabaseClient, itemId) {
+// Atualiza o rótulo "Dono" de um item (ex.: "Eu" / "Namorada").
+export async function setItemOwnerLabel(supabaseClient, itemId, label) {
   const { error } = await supabaseClient
     .from("pluggy_items")
-    .delete()
+    .update({ owner_label: label || null })
     .eq("item_id", itemId);
   if (error) throw error;
 }
