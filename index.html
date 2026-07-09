@@ -1,128 +1,14 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#6366f1" />
-    <meta
-      name="description"
-      content="Precis Finance: controle financeiro pessoal com contas, cartões, orçamentos, metas, relatórios, offline e exportação."
-    />
-    <title>Precis Finance — Controle financeiro com precisão</title>
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="src/styles.css" />
-    <script src="https://cdn.pluggy.ai/pluggy-connect/v2.8.0/pluggy-connect.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.ico" />
+    <title>Precis Finance</title>
+    <meta name="description" content="Gestão financeira inteligente sobre Open Finance." />
   </head>
   <body>
-    <!-- Reusable icon set (lucide-inspired, strokeWidth 1.75) -->
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-      <defs>
-        <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/>
-          <rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>
-        </symbol>
-        <symbol id="i-transactions" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7h13"/><path d="m14 4 3 3-3 3"/><path d="M20 17H7"/><path d="m10 20-3-3 3-3"/>
-        </symbol>
-        <symbol id="i-accounts" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 7H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1Z"/>
-          <path d="M16 14h2"/><path d="M18 7V5a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3"/>
-        </symbol>
-        <symbol id="i-cards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/>
-        </symbol>
-        <symbol id="i-budgets" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12A9 9 0 1 1 12 3"/><path d="M21 12A9 9 0 0 0 12 3v9Z"/>
-        </symbol>
-        <symbol id="i-goals" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>
-        </symbol>
-        <symbol id="i-reports" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.6"/>
-          <rect x="12" y="8" width="3" height="10" rx="0.6"/><rect x="17" y="5" width="3" height="13" rx="0.6"/>
-        </symbol>
-        <symbol id="i-automation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 3 4 14h7l-1 7 9-11h-7l1-7Z"/>
-        </symbol>
-        <symbol id="i-security" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/>
-        </symbol>
-        <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
-        </symbol>
-        <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 5v14"/><path d="M5 12h14"/>
-        </symbol>
-      </defs>
-    </svg>
-
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Menu principal">
-        <a class="brand" href="#/dashboard" aria-label="Precis Finance">
-          <img src="assets/icon.svg" alt="" class="brand-mark" />
-          <span>
-            <strong>Precis Finance</strong>
-            <small>Controle com precisão</small>
-          </span>
-        </a>
-
-        <nav class="main-nav" id="mainNav" aria-label="Navegação">
-          <button type="button" data-view="dashboard"><svg class="nav-icon" aria-hidden="true"><use href="#i-dashboard"/></svg> Visão geral</button>
-          <button type="button" data-view="transactions"><svg class="nav-icon" aria-hidden="true"><use href="#i-transactions"/></svg> Lançamentos</button>
-          <button type="button" data-view="accounts"><svg class="nav-icon" aria-hidden="true"><use href="#i-accounts"/></svg> Contas</button>
-          <button type="button" data-view="cards"><svg class="nav-icon" aria-hidden="true"><use href="#i-cards"/></svg> Cartões</button>
-          <button type="button" data-view="investments"><svg class="nav-icon" aria-hidden="true"><use href="#i-goals"/></svg> Investimentos</button>
-          <button type="button" data-view="budgets"><svg class="nav-icon" aria-hidden="true"><use href="#i-budgets"/></svg> Orçamentos</button>
-          <button type="button" data-view="goals"><svg class="nav-icon" aria-hidden="true"><use href="#i-goals"/></svg> Metas</button>
-          <button type="button" data-view="reports"><svg class="nav-icon" aria-hidden="true"><use href="#i-reports"/></svg> Relatórios</button>
-          <button type="button" data-view="automation"><svg class="nav-icon" aria-hidden="true"><use href="#i-automation"/></svg> Automações</button>
-          <button type="button" data-view="openfinance"><svg class="nav-icon" aria-hidden="true"><use href="#i-accounts"/></svg> Open Finance</button>
-          <button type="button" data-view="security"><svg class="nav-icon" aria-hidden="true"><use href="#i-security"/></svg> Segurança</button>
-        </nav>
-
-        <div class="sidebar-summary" id="sidebarSummary"></div>
-      </aside>
-
-      <main class="workspace">
-        <header class="topbar">
-          <div class="title-block">
-            <p class="eyebrow">Painel financeiro</p>
-            <h1 id="viewTitle">Visão geral</h1>
-          </div>
-
-          <div class="topbar-actions">
-            <label class="select-label">
-              <span>Mês</span>
-              <select id="periodSelect" aria-label="Selecionar mês"></select>
-            </label>
-            <button class="icon-button" type="button" id="lockButton" title="Bloquear" aria-label="Bloquear">
-              <svg class="btn-icon" aria-hidden="true"><use href="#i-lock"/></svg>
-            </button>
-            <button class="primary-action" type="button" id="newTxButton">
-              <svg class="btn-icon" aria-hidden="true"><use href="#i-plus"/></svg>
-              Novo lançamento
-            </button>
-          </div>
-        </header>
-
-        <section class="alerts" id="alerts" aria-live="polite"></section>
-        <section class="content" id="content"></section>
-      </main>
-    </div>
-
-    <section class="lock-screen" id="lockScreen" hidden>
-      <section class="lock-panel">
-        <img src="assets/icon.svg" alt="" />
-        <h2>Precis Finance</h2>
-        <p>Carregando login em nuvem...</p>
-      </section>
-    </section>
-
-    <div id="modalRoot"></div>
-    <div id="toastRoot" class="toast-root" aria-live="polite"></div>
-
-    <script src="src/env.js"></script>
-    <script type="module" src="src/app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
