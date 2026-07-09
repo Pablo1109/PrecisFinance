@@ -1,13 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseConfig } from "./supabaseConfig";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const cfg = getSupabaseConfig();
 
-if (!url || !anon) {
+if (cfg.issues.length) {
   // eslint-disable-next-line no-console
-  console.warn("[precis] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY não configurados.");
+  console.warn("[precis] Supabase:", cfg.issues.join(" | "));
 }
 
-export const supabase = createClient(url ?? "", anon ?? "", {
+export const supabaseConfig = cfg;
+
+export const supabase = createClient(cfg.url ?? "", cfg.rawKey || "", {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });

@@ -73,7 +73,7 @@ export function CorrectionPage() {
                   </div>
                 )}
                 {item.kind === "card_incomplete" && (
-                  <Link to={`/cartoes/${item.entityId}`} style={{ display: "inline-block", marginTop: 8 }}>
+                  <Link to={`/cartoes-of/${item.entityId}`} style={{ display: "inline-block", marginTop: 8 }}>
                     Corrigir cartão →
                   </Link>
                 )}
@@ -81,7 +81,7 @@ export function CorrectionPage() {
                   <div style={{ marginTop: 8 }}>
                     Campo <code>{String(item.payload.field)}</code>: OF={String(item.payload.openfinance)} vs Manual={String(item.payload.manual)}
                     {item.entity === "card" && (
-                      <Link to={`/cartoes/${item.entityId}`} style={{ display: "block", marginTop: 4 }}>Revisar →</Link>
+                      <Link to={`/cartoes-of/${item.entityId}`} style={{ display: "block", marginTop: 4 }}>Revisar →</Link>
                     )}
                   </div>
                 )}
@@ -99,7 +99,7 @@ export function CorrectionPage() {
           <ul>
             {incomplete.map((c) => (
               <li key={c.cardId}>
-                <Link to={`/cartoes/${c.cardId}`}>{c.displayName.value ?? c.cardId}</Link>
+                <Link to={`/cartoes-of/${c.cardId}`}>{c.displayName.value ?? c.cardId}</Link>
                 <span style={{ color: "var(--muted)", marginLeft: 8, fontSize: 13 }}>
                   {c.currentBillAmount.value == null && "fatura ausente · "}
                   {c.dueDay.confidence < 50 && "vencimento incerto · "}

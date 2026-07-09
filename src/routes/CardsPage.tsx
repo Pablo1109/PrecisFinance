@@ -17,7 +17,7 @@ export function CardsPage() {
       <h2>Cartões</h2>
       <div className="grid">
         {data.map((c) => (
-          <Link key={c.cardId} to={`/cartoes/${c.cardId}`} className="card" style={{ textDecoration: "none" }}>
+          <Link key={c.cardId} to={`/cartoes-of/${c.cardId}`} className="card" style={{ textDecoration: "none" }}>
             <h3 style={{ marginTop: 0 }}>{c.displayName.value ?? "Cartão"}</h3>
             <div className="row"><span>Limite total</span><FieldValue field={c.creditLimit} format={brl} /></div>
             <div className="row"><span>Disponível</span><FieldValue field={c.availableLimit} format={brl} /></div>
