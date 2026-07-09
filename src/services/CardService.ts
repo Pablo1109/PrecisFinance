@@ -91,13 +91,9 @@ function resolveCard(row: CardRow, overrides: FieldOverride[]): ResolvedCard {
 export const CardService = {
   async listResolved(): Promise<ResolvedCard[]> {
     const rows = await CardsRepository.listAll();
-    // Carrega overrides em lote (uma query por cartão — evolua para IN quando >30)
-    return Promise.all(
-      rows.map(async (row) => {
-        const ov = await OverridesRepository.listForEntity("card", row.card_id);
-        return resolveCard(row, ov);
-      }),
-    );
+    const cardIds = rows.map((r) => r.card_id);
+    const overridesMap = await OverridesRepository.listForEntities("card", cardIds);
+    return rows.map((row) => resolveCard(row, overridesMap.get(row.card_id) ?? []));
   },
   async getResolved(cardId: string, opts: ResolveCardOptions = {}): Promise<ResolvedCard | null> {
     const row = await CardsRepository.getById(cardId);
@@ -107,15 +103,21 @@ export const CardService = {
   },
   /** Aplica override manual em um campo do cartão. */
   async setOverride(userId: string, cardId: string, field: string, value: unknown, reason?: string) {
-    await OverridesRepository.upsert(userId, {
-      entity: "card",
-      entityId: cardId,
-      field,
-      value,
-      source: "manual",
-      confidence: 100,
-      reason,
-    });
+    const existing = await OverridesRepository.listForEntity("card", cardId);
+    const prev = existing.find((o) => o.field === field);
+    await OverridesRepository.upsert(
+      userId,
+      {
+        entity: "card",
+        entityId: cardId,
+        field,
+        value,
+        source: "manual",
+        confidence: 100,
+        reason,
+      },
+      prev ? { value: prev.value, source: prev.source } : undefined,
+    );
   },
   async clearOverride(userId: string, cardId: string, field: string) {
     await OverridesRepository.remove(userId, { entity: "card", entityId: cardId, field });

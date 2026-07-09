@@ -56,12 +56,13 @@ export const ReconciliationEngine = {
   },
 
   /** Busca candidatos de conciliação entre uma transação nova e um conjunto de entries existentes. */
-  findCandidates(newTx: RawTx & { direction: "debit" | "credit" }, existing: FinanceEntry[]): RecoCandidate[] {
+  findCandidates(newTx: RawTx & { direction: "debit" | "credit"; cardId?: string | null }, existing: FinanceEntry[]): RecoCandidate[] {
     const newDate = new Date(newTx.date).getTime();
     const newDescNorm = normalizeDesc(newTx.description);
+    const acctKey = newTx.cardId ?? newTx.accountId;
 
     return existing
-      .filter((e) => e.accountId === newTx.accountId)
+      .filter((e) => (e.cardId ?? e.accountId) === acctKey)
       .filter((e) => e.direction === newTx.direction)
       .filter((e) => Math.abs(new Date(e.date).getTime() - newDate) <= 3 * DAY)
       .filter((e) => {

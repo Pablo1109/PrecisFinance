@@ -3,11 +3,11 @@ import { useParams } from "react-router-dom";
 import { useState } from "react";
 import { CardService } from "@/services/CardService";
 import { supabase } from "@/lib/supabase";
-import { FieldValue } from "@/components/ui/FieldValue";
+import { FieldBreakdown } from "@/components/ui/FieldBreakdown";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const FIELDS: Array<{ key: keyof any; label: string; kind: "money" | "day" | "text" }> = [
+const FIELDS: Array<{ key: keyof any; label: string; kind: "money" | "day" }> = [
   { key: "creditLimit", label: "Limite total", kind: "money" },
   { key: "availableLimit", label: "Limite disponível", kind: "money" },
   { key: "usedLimit", label: "Limite utilizado", kind: "money" },
@@ -58,6 +58,20 @@ export function CardDetailPage() {
       setEdits({});
       qc.invalidateQueries({ queryKey: ["card", cardId] });
       qc.invalidateQueries({ queryKey: ["cards"] });
+      qc.invalidateQueries({ queryKey: ["review-queue"] });
+    },
+  });
+
+  const revert = useMutation({
+    mutationFn: async (dbField: string) => {
+      const { data: session } = await supabase.auth.getUser();
+      const uid = session?.user?.id;
+      if (!uid) throw new Error("Não autenticado");
+      await CardService.clearOverride(uid, cardId, dbField);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["card", cardId] });
+      qc.invalidateQueries({ queryKey: ["cards"] });
     },
   });
 
@@ -66,16 +80,26 @@ export function CardDetailPage() {
   return (
     <>
       <h2>{card.displayName.value ?? "Cartão"}</h2>
+      <p style={{ color: "var(--muted)", marginBottom: 16 }}>
+        Cada campo mostra o valor sincronizado, manual (se houver) e o valor final que o Precis usa.
+        Correções manuais são preservadas nas próximas sincronizações.
+      </p>
       <div className="card" style={{ maxWidth: 720 }}>
         {FIELDS.map((f) => {
           const rf = (card as any)[f.key];
+          const dbField = DB_FIELD_MAP[f.key as string];
+          const fmt = f.kind === "money" ? brl : (d: number) => `dia ${d}`;
           return (
-            <div key={f.key as string} className="row" style={{ alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label>{f.label}</label>
-                <FieldValue field={rf} format={f.kind === "money" ? brl : f.kind === "day" ? (d: number) => `dia ${d}` : undefined} />
-              </div>
-              <div style={{ flex: 1, minWidth: 160 }}>
+            <div key={f.key as string}>
+              <FieldBreakdown
+                field={rf}
+                label={f.label}
+                format={fmt}
+                onRevert={rf.candidates?.some((c: { source: string }) => c.source === "manual")
+                  ? () => revert.mutate(dbField)
+                  : undefined}
+              />
+              <div style={{ marginBottom: 16 }}>
                 <label>Corrigir manualmente</label>
                 <input
                   placeholder={f.kind === "day" ? "1..31" : "0.00"}
@@ -86,7 +110,7 @@ export function CardDetailPage() {
             </div>
           );
         })}
-        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8 }}>
           <button className="primary" disabled={save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? "Salvando…" : "Aplicar correções"}
           </button>

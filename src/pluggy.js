@@ -129,7 +129,7 @@ export async function listRemoteItems(supabaseClient) {
 // Sincroniza um item específico (contas, transações, cartões, investimentos).
 export async function syncItem(supabaseClient, itemId, { full = false } = {}) {
   const { data, error } = await supabaseClient.functions.invoke("pluggy-sync", {
-    body: { itemId, full },
+    body: { item_id: itemId, itemId, full },
   });
   if (error || data?.error) throw new Error(`pluggy-sync: ${getFunctionError(error, data)}`);
   return data;

@@ -7,13 +7,13 @@ import {
   json,
   syncItem,
 } from "../_shared/pluggy.ts";
+import { emptyCounts, projectItemToPrecis } from "../_shared/precis-projection.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
   try {
-    // Verificação opcional por secret (?secret=...) — recomendado.
     const expected = Deno.env.get("PLUGGY_WEBHOOK_SECRET");
     if (expected) {
       const url = new URL(req.url);
@@ -26,7 +26,6 @@ Deno.serve(async (req) => {
     const event: string = payload.event ?? "";
     const itemId: string | undefined = payload.itemId ?? payload.item?.id;
 
-    // Só reagimos a eventos que mudam dados.
     const shouldSync =
       itemId &&
       (event.startsWith("item/") || event.startsWith("transactions/"));
@@ -34,7 +33,6 @@ Deno.serve(async (req) => {
 
     const admin = adminClient();
 
-    // Descobre o dono do item pelo mapeamento salvo no connect.
     const { data: item } = await admin
       .from("pluggy_items")
       .select("user_id")
@@ -42,14 +40,38 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!item) {
-      // Item ainda não mapeado (ex.: primeiro webhook antes do sync). Ignora.
       return json({ ok: true, unmapped: itemId });
     }
 
     const apiKey = await getApiKey();
+
+    // 1. Sincroniza tabelas raw pluggy_*
     const result = await syncItem(admin, apiKey, item.user_id, itemId!, { incremental: true });
 
-    return json({ ok: result.errors.length === 0, synced: itemId, result });
+    // 2. Projeta no motor Precis (precis_cards, precis_entries, review queue)
+    const { data: run } = await admin
+      .from("precis_sync_runs")
+      .insert({ user_id: item.user_id, item_id: itemId, scope: "item", status: "running", counts: {} })
+      .select("id")
+      .single();
+
+    let precisCounts = emptyCounts();
+    if (run?.id) {
+      precisCounts = await projectItemToPrecis(admin, {
+        userId: item.user_id,
+        itemId: itemId!,
+        runId: run.id,
+        apiKey,
+        counts: emptyCounts(),
+      });
+      await admin.from("precis_sync_runs").update({
+        status: result.errors.length ? "partial" : "ok",
+        finished_at: new Date().toISOString(),
+        counts: precisCounts,
+      }).eq("id", run.id);
+    }
+
+    return json({ ok: result.errors.length === 0, synced: itemId, result, precis: precisCounts });
   } catch (e) {
     console.error(e);
     return json({ error: String(e instanceof Error ? e.message : e) }, 500);

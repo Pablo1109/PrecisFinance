@@ -6,6 +6,7 @@ import { App } from "./App";
 import { CardsPage } from "./routes/CardsPage";
 import { CardDetailPage } from "./routes/CardDetailPage";
 import { CorrectionPage } from "./routes/CorrectionPage";
+import { EntriesPage } from "./routes/EntriesPage";
 import "./styles.css";
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route index element={<Navigate to="/cartoes" replace />} />
             <Route path="cartoes" element={<CardsPage />} />
             <Route path="cartoes/:cardId" element={<CardDetailPage />} />
+            <Route path="lancamentos" element={<EntriesPage />} />
             <Route path="correcao/open-finance" element={<CorrectionPage />} />
           </Route>
         </Routes>
