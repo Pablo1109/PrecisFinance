@@ -1,11 +1,10 @@
 // Tela "Open Finance" para o PrecisFinance.
-// Conexões bancárias são gerenciadas em meu.pluggy.ai — este app só lê e
-// sincroniza os items visíveis pelo Pluggy Demo App (proxy do MeuPluggy).
+// Conexões bancárias abertas pelo próprio app via widget Pluggy Connect.
 
 import {
   syncAll,
   syncItem,
-  listRemoteItems,
+  openPluggyConnect,
   getPluggyItems,
   getPluggyAccounts,
   getPluggyCards,
@@ -22,7 +21,7 @@ export function setOpenFinanceContext({ supabaseClient, showToast } = {}) {
   if (typeof showToast === "function") _toast = showToast;
 }
 
-// ---------------- helpers de formatação (independentes do app) --------------
+// ---------------- helpers de formatação -------------------------------------
 function brl(value, currency = "BRL") {
   const n = Number(value ?? 0);
   try {
@@ -48,7 +47,7 @@ function statusPill(status) {
   const s = String(status || "").toUpperCase();
   if (s === "UPDATED") return `<span class="pill">Atualizado</span>`;
   if (s === "UPDATING") return `<span class="pill warn">Atualizando…</span>`;
-  if (s === "LOGIN_ERROR" || s === "ERROR") return `<span class="pill danger">Erro — reconectar em meu.pluggy.ai</span>`;
+  if (s === "LOGIN_ERROR" || s === "ERROR") return `<span class="pill danger">Erro — reconectar</span>`;
   if (s === "WAITING_USER_INPUT") return `<span class="pill warn">Aguardando você</span>`;
   return `<span class="pill">${esc(status || "—")}</span>`;
 }
@@ -62,15 +61,15 @@ export function renderOpenFinance(container) {
 
   container.innerHTML = `
     <section class="panel">
-      <h3>Conexões gerenciadas no MeuPluggy</h3>
+      <h3>Open Finance</h3>
       <p class="muted">
-        Para adicionar ou remover bancos, acesse
-        <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai ↗</a>.
-        Depois clique em <strong>Sincronizar tudo</strong> aqui para importar os dados.
+        Conecte seus bancos com segurança pelo Pluggy Connect. Depois use
+        <strong>Sincronizar tudo</strong> pra puxar contas, cartões, investimentos e transações.
       </p>
     </section>
     <section class="actions-row">
-      <button class="primary-action" type="button" id="ofSyncAll">↻ Sincronizar tudo</button>
+      <button class="primary-action" type="button" id="ofConnect">+ Conectar banco</button>
+      <button class="secondary-action" type="button" id="ofSyncAll">↻ Sincronizar tudo</button>
     </section>
     <div id="ofBody">
       <section class="panel"><p class="muted">Carregando dados do Open Finance…</p></section>
@@ -79,12 +78,31 @@ export function renderOpenFinance(container) {
 
   const body = container.querySelector("#ofBody");
 
+  container.querySelector("#ofConnect").addEventListener("click", async () => {
+    try {
+      _toast("Abrindo Pluggy Connect…");
+      await openPluggyConnect(_supabase, {
+        onSuccess: async () => {
+          _toast("Banco conectado! Sincronizando…");
+          await loadBody(body);
+        },
+        onError: (e) => {
+          console.error(e);
+          _toast("Erro ao conectar: " + (e?.message || e));
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      _toast("Erro ao abrir widget: " + (e?.message || e));
+    }
+  });
+
   container.querySelector("#ofSyncAll").addEventListener("click", async () => {
     try {
       _toast("Sincronizando conexões…");
       const res = await syncAll(_supabase);
       if (!res.total) {
-        _toast("Nenhum banco visível. Conecte em meu.pluggy.ai primeiro.");
+        _toast("Nada pra sincronizar ainda. Clique em Conectar banco.");
       } else if (res.errors.length) {
         _toast(`Sincronizado: ${res.items}/${res.total} (${res.errors.length} com erro).`);
       } else {
@@ -108,6 +126,16 @@ export function renderOpenFinance(container) {
         await syncItem(_supabase, id);
         _toast("Conexão atualizada.");
         await loadBody(body);
+      } else if (ofAction === "reconnect-item") {
+        _toast("Abrindo reconexão…");
+        await openPluggyConnect(_supabase, {
+          itemId: id,
+          onSuccess: async () => {
+            _toast("Reconectado! Sincronizando…");
+            await loadBody(body);
+          },
+          onError: (e) => _toast("Erro: " + (e?.message || e)),
+        });
       }
     } catch (e) {
       console.error(e);
@@ -145,16 +173,13 @@ async function loadBody(body) {
     if (!items.length) {
       body.innerHTML = `
         <section class="panel">
-          <h3>Ainda nada por aqui</h3>
-          <p class="muted">Conecte seus bancos em
-            <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai ↗</a>
-            e depois clique em <strong>Sincronizar tudo</strong>.
-          </p>
+          <h3>Nenhum banco conectado ainda</h3>
+          <p class="muted">Clique em <strong>+ Conectar banco</strong> acima pra abrir o Pluggy Connect
+             e adicionar sua primeira instituição.</p>
         </section>`;
       return;
     }
 
-    // Contas bancárias (exclui cartões, que têm seção própria)
     const bankAccounts = accounts.filter((a) => a.type !== "CREDIT");
 
     body.innerHTML = `
@@ -175,7 +200,10 @@ function sectionConnections(items) {
   return `
     <h2 class="section-title">Bancos conectados</h2>
     <section class="card-grid">
-      ${items.map((it) => `
+      ${items.map((it) => {
+        const s = String(it.status || "").toUpperCase();
+        const needsReconnect = s === "LOGIN_ERROR" || s === "ERROR" || s === "WAITING_USER_INPUT";
+        return `
         <article class="item-card">
           <div class="item-title">
             <div>
@@ -193,9 +221,10 @@ function sectionConnections(items) {
           </label>
           <div class="actions-row">
             <button class="secondary-action" type="button" data-of-action="sync-item" data-id="${esc(it.item_id)}">Atualizar</button>
+            ${needsReconnect ? `<button class="primary-action" type="button" data-of-action="reconnect-item" data-id="${esc(it.item_id)}">Reconectar</button>` : ""}
           </div>
-        </article>
-      `).join("")}
+        </article>`;
+      }).join("")}
     </section>`;
 }
 
@@ -274,7 +303,7 @@ function sectionTransactions(transactions) {
         <tbody>
           ${transactions.map((t) => `
             <tr>
-              <td>${fmtDate(t.date)}</td>
+              <td>${fmtDate(String(t.date).slice(0,10))}</td>
               <td>${esc(t.description || "")}</td>
               <td>${esc(t.category || "")}</td>
               <td style="text-align:right">${brl(t.amount, t.currency_code || "BRL")}</td>
