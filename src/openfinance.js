@@ -10,8 +10,11 @@ import {
   getPluggyCards,
   getPluggyTransactions,
   getPluggyInvestments,
+  getPluggyBills,
+  getPluggyLoans,
   setItemOwnerLabel,
 } from "./pluggy.js";
+
 
 let _supabase = null;
 let _toast = (msg) => console.log("[openfinance]", msg);
@@ -168,12 +171,14 @@ export function renderOpenFinance(container) {
 async function loadBody(body, { importToApp = false } = {}) {
   try {
     const transactionLimit = importToApp ? 5000 : 50;
-    const [items, accounts, cards, investments, transactions] = await Promise.all([
+    const [items, accounts, cards, investments, transactions, bills, loans] = await Promise.all([
       getPluggyItems(_supabase),
       getPluggyAccounts(_supabase),
       getPluggyCards(_supabase),
       getPluggyInvestments(_supabase),
       getPluggyTransactions(_supabase, { limit: transactionLimit }),
+      getPluggyBills(_supabase),
+      getPluggyLoans(_supabase),
     ]);
 
     if (!items.length) {
@@ -189,7 +194,7 @@ async function loadBody(body, { importToApp = false } = {}) {
     const bankAccounts = accounts.filter((a) => a.type !== "CREDIT");
 
     if (importToApp && _onSynced) {
-      const result = await _onSynced({ items, accounts, cards, investments, transactions });
+      const result = await _onSynced({ items, accounts, cards, investments, transactions, bills, loans });
       if (result?.message) _toast(result.message);
     }
 

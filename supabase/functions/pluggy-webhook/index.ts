@@ -47,11 +47,11 @@ Deno.serve(async (req) => {
     }
 
     const apiKey = await getApiKey();
-    await syncItem(admin, apiKey, item.user_id, itemId!);
+    const result = await syncItem(admin, apiKey, item.user_id, itemId!, { incremental: true });
 
-    return json({ ok: true, synced: itemId });
+    return json({ ok: result.errors.length === 0, synced: itemId, result });
   } catch (e) {
     console.error(e);
-    return json({ error: String(e) }, 500);
+    return json({ error: String(e instanceof Error ? e.message : e) }, 500);
   }
 });

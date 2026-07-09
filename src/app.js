@@ -1,4 +1,6 @@
 import { renderOpenFinance, setOpenFinanceContext, setOpenFinanceIntegrationHandler } from "./openfinance.js";
+import { getCategoryRules, saveCategoryRule, setTransactionCategory } from "./pluggy.js";
+
 
 const LEGACY_STORAGE_KEY = "precis-finance-state-v1";
 const CLOUD_CACHE_PREFIX = "precis-finance-cloud-cache-v1:";
@@ -10,6 +12,7 @@ const routes = {
   transactions: { title: "Lançamentos", render: renderTransactions },
   accounts: { title: "Contas", render: renderAccounts },
   cards: { title: "Cartões", render: renderCards },
+  investments: { title: "Investimentos", render: renderInvestments },
   budgets: { title: "Orçamentos", render: renderBudgets },
   goals: { title: "Metas", render: renderGoals },
   reports: { title: "Relatórios", render: renderReports },
@@ -276,8 +279,21 @@ async function loadUserSession(user) {
   }
 
   subscribeToCloudChanges();
+  loadOpenFinanceCategoryRules();
   afterStateLoaded();
 }
+
+// Carrega as regras de categoria aprendidas (não bloqueia o boot).
+async function loadOpenFinanceCategoryRules() {
+  if (!supabaseClient || !currentUser) return;
+  try {
+    const rules = await getCategoryRules(supabaseClient);
+    setOpenFinanceCategoryRules(rules);
+  } catch (e) {
+    console.warn("[precis] Não foi possível carregar regras de categoria:", e);
+  }
+}
+
 
 function readLegacyLocalState() {
   const saved = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -494,6 +510,8 @@ function normalizeState(value) {
     budgets: value.budgets || seed.budgets,
     goals: value.goals || seed.goals,
     rules: value.rules || seed.rules,
+    investments: value.investments || [],
+    loans: value.loans || [],
     schemaVersion: value.schemaVersion || 1
   };
 }
@@ -527,15 +545,20 @@ function pluggyCardLimit(account) {
   return Number(credit.creditLimit ?? credit.limit ?? credit.totalCreditLimit ?? 0) || 0;
 }
 
-function pluggyDueDay(account) {
-  const credit = account.credit_data || {};
-  const date = String(credit.balanceDueDate || credit.dueDate || "");
-  const day = Number(date.slice(-2));
+// Dia de vencimento — prioriza a fatura (bill) mais recente, depois credit_data.
+function pluggyDueDay(account, bill) {
+  const dateStr = String(
+    bill?.due_date || account.credit_data?.balanceDueDate || account.credit_data?.dueDate || "",
+  );
+  const day = Number(dateStr.slice(8, 10));
   return Number.isFinite(day) && day >= 1 && day <= 31 ? day : 10;
 }
 
-function pluggyClosingDay(account) {
-  const due = pluggyDueDay(account);
+function pluggyClosingDay(account, bill) {
+  const closing = String(bill?.closing_date || "");
+  const day = Number(closing.slice(8, 10));
+  if (Number.isFinite(day) && day >= 1 && day <= 31) return day;
+  const due = pluggyDueDay(account, bill);
   return due > 7 ? due - 7 : 25;
 }
 
@@ -561,84 +584,212 @@ function mapPluggyTransactionType(transaction) {
   return "expense";
 }
 
-function importOpenFinanceSnapshot({ accounts = [], cards = [], transactions = [] } = {}) {
+// ---------------- Classificação automática (regras + aprendizado) ------------
+// Estrutura isolada: para plugar IA no futuro, basta trocar o corpo de
+// classifyPluggyTransaction() por uma chamada ao modelo, mantendo a assinatura.
+
+let _ofCategoryRules = [];
+
+export function setOpenFinanceCategoryRules(rules) {
+  _ofCategoryRules = Array.isArray(rules) ? rules : [];
+}
+
+// Deriva uma palavra-chave estável da descrição (ignora números e ruído).
+function keywordFromDescription(description) {
+  const words = String(description || "")
+    .toLowerCase()
+    .replace(/[^a-zà-ú\s]/gi, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4);
+  return words[0] || String(description || "").toLowerCase().trim().slice(0, 20);
+}
+
+// Ensina a classificação: grava override na transação + regra por palavra-chave.
+async function learnOpenFinanceCategory(tx) {
+  const pattern = keywordFromDescription(tx.description);
+  // Atualiza o cache local para efeito imediato nas próximas classificações.
+  const existingRule = _ofCategoryRules.find(
+    (r) => r.match_type === "keyword" && String(r.pattern).toLowerCase() === pattern,
+  );
+  if (existingRule) {
+    existingRule.category_id = tx.categoryId;
+    existingRule.subcategory = tx.subcategory || "";
+  } else {
+    _ofCategoryRules.push({ match_type: "keyword", pattern, category_id: tx.categoryId, subcategory: tx.subcategory || "" });
+  }
+  if (!supabaseClient || !currentUser) return;
+  try {
+    await setTransactionCategory(supabaseClient, tx.pluggyTransactionId, {
+      category: tx.categoryId,
+      subcategory: tx.subcategory || "",
+    });
+    await saveCategoryRule(supabaseClient, currentUser.id, {
+      matchType: "keyword",
+      pattern,
+      categoryId: tx.categoryId,
+      subcategory: tx.subcategory || "",
+    });
+  } catch (e) {
+    console.warn("[precis] Não foi possível salvar aprendizado de categoria:", e);
+  }
+}
+
+
+// Palavras-chave embutidas -> categoria do app (usa os ids do seed).
+const OF_KEYWORD_RULES = [
+  { re: /(mercado|supermerc|atacad|hortifr|acougue|padaria)/i, cat: "cat_food", sub: "Supermercado" },
+  { re: /(ifood|rappi|restaurante|lanchonete|pizza|burger|mc\s?donald|food|bar\b|cafe)/i, cat: "cat_food", sub: "Restaurante" },
+  { re: /(uber|99app|99\s|cabify|taxi|combustivel|posto|gasolina|estacion|pedagio|onibus|metro)/i, cat: "cat_transport", sub: "Transporte" },
+  { re: /(farmacia|drogaria|drogasil|hospital|clinica|consulta|laboratorio|saude|plano de saude|unimed|amil)/i, cat: "cat_health", sub: "Saúde" },
+  { re: /(netflix|spotify|prime|disney|hbo|globoplay|youtube|assinatura|academia|smartfit|gym)/i, cat: "cat_subs", sub: "Assinaturas" },
+  { re: /(aluguel|condominio|energia|\bluz\b|\bagua\b|internet|telefone|vivo|claro|tim\b|net\b|enel|sabesp)/i, cat: "cat_home", sub: "Moradia" },
+  { re: /(cinema|viagem|hotel|airbnb|evento|ingresso|show|teatro)/i, cat: "cat_leisure", sub: "Lazer" },
+  { re: /(salario|holerite|pagamento salario|folha)/i, cat: "cat_salary", sub: "Salário", income: true },
+  { re: /(dividendo|jcp|rendimento|freelance|freela|venda)/i, cat: "cat_extra", sub: "Renda extra", income: true },
+  { re: /(fatura|cartao de credito|pagamento de fatura)/i, cat: "cat_cards", sub: "Cartões e crédito" },
+  { re: /(ted|doc\b|pix|transfer)/i, cat: "cat_openfinance", sub: "Transferência" },
+];
+
+function categoryExists(id) {
+  return !!state.categories.find((c) => c.id === id);
+}
+
+// Retorna { categoryId, subcategory } para uma transação do Open Finance.
+function classifyPluggyTransaction(transaction, type) {
+  const ofCategory = ensureOpenFinanceCategory();
+  const description = String(transaction.description || transaction.raw?.description || "").toLowerCase();
+  const pluggyCat = String(transaction.category || "").toLowerCase();
+
+  // 1) Override manual salvo no banco (user_category) — prioridade máxima.
+  if (transaction.user_category && categoryExists(transaction.user_category)) {
+    return { categoryId: transaction.user_category, subcategory: transaction.user_subcategory || "" };
+  }
+
+  // 2) Regras aprendidas com as correções do usuário (tabela no banco).
+  for (const rule of _ofCategoryRules) {
+    if (!rule.category_id || !categoryExists(rule.category_id)) continue;
+    const pattern = String(rule.pattern || "").toLowerCase();
+    if (!pattern) continue;
+    const hit =
+      (rule.match_type === "exact" && description === pattern) ||
+      (rule.match_type === "pluggy_category" && pluggyCat === pattern) ||
+      (rule.match_type !== "exact" && rule.match_type !== "pluggy_category" && description.includes(pattern));
+    if (hit) return { categoryId: rule.category_id, subcategory: rule.subcategory || "" };
+  }
+
+  // 3) Regras embutidas por palavra-chave.
+  for (const rule of OF_KEYWORD_RULES) {
+    if (rule.income && type !== "income") continue;
+    if (!rule.income && type === "income" && rule.cat !== "cat_openfinance") continue;
+    if (rule.re.test(description) || rule.re.test(pluggyCat)) {
+      if (categoryExists(rule.cat)) return { categoryId: rule.cat, subcategory: rule.sub };
+    }
+  }
+
+  // 4) Categoria que o próprio Pluggy retornou (vira subcategoria em OF).
+  return {
+    categoryId: ofCategory.id,
+    subcategory: transaction.category || (type === "income" ? "Receita" : "Banco"),
+  };
+}
+
+function importOpenFinanceSnapshot({ accounts = [], cards = [], transactions = [], investments = [], loans = [], bills = [] } = {}) {
   if (!state) return { message: "Estado financeiro ainda não carregado." };
 
-  const category = ensureOpenFinanceCategory();
+  ensureOpenFinanceCategory();
+  if (!Array.isArray(state.investments)) state.investments = [];
+  if (!Array.isArray(state.loans)) state.loans = [];
+
   const allAccounts = accounts || [];
   const creditAccountIds = new Set((cards || []).map((card) => card.account_id));
-  const existingAccountIds = new Set(state.accounts.map((account) => account.id));
-  const existingCardIds = new Set(state.cards.map((card) => card.id));
-  const existingTxIds = new Set(state.transactions.map((transaction) => transaction.id));
-  let addedAccounts = 0;
-  let updatedAccounts = 0;
-  let addedCards = 0;
-  let updatedCards = 0;
-  let addedTransactions = 0;
-  let updatedTransactions = 0;
+  const billByAccount = new Map((bills || []).map((b) => [b.account_id, b]));
+  const existingAccounts = new Map(state.accounts.map((a) => [a.id, a]));
+  const existingCards = new Map(state.cards.map((c) => [c.id, c]));
+  const existingTx = new Map(state.transactions.map((t) => [t.id, t]));
+  let addedAccounts = 0, updatedAccounts = 0;
+  let addedCards = 0, updatedCards = 0;
+  let addedTransactions = 0, updatedTransactions = 0;
 
+  // ---- Contas bancárias (saldo = fonte da verdade do Open Finance) ----
   for (const account of allAccounts) {
     if (creditAccountIds.has(account.account_id) || account.type === "CREDIT") continue;
     const id = stablePluggyId("pluggy_acc", account.account_id);
+    const prev = existingAccounts.get(id);
     const next = {
       id,
-      name: account.marketing_name || account.name || "Conta Open Finance",
+      // display_name (override do usuário) tem prioridade sobre o nome do banco.
+      name: account.display_name || prev?.name || account.marketing_name || account.name || "Conta Open Finance",
       type: pluggyAccountType(account),
       currency: account.currency_code || "BRL",
-      balance: Number(account.balance ?? 0),
-      color: pluggyColor(account.account_id),
+      balance: Number(account.balance ?? 0),       // sempre do OF
+      color: prev?.color || pluggyColor(account.account_id),
       source: "pluggy",
       pluggyAccountId: account.account_id,
       pluggyItemId: account.item_id,
       updatedAt: new Date().toISOString()
     };
-    if (existingAccountIds.has(id)) {
-      state.accounts = state.accounts.map((current) => current.id === id ? { ...current, ...next } : current);
+    if (prev) {
+      Object.assign(prev, next);
       updatedAccounts++;
     } else {
       state.accounts.push(next);
-      existingAccountIds.add(id);
+      existingAccounts.set(id, next);
       addedAccounts++;
     }
   }
 
+  // ---- Cartões de crédito (limite, fatura, vencimento) ----
   for (const cardAccount of cards || []) {
     const id = stablePluggyId("pluggy_card", cardAccount.account_id);
     const linkedAccountId = stablePluggyId("pluggy_acc", cardAccount.account_id);
+    const prev = existingCards.get(id);
+    const bill = billByAccount.get(cardAccount.account_id);
     const next = {
       id,
-      name: cardAccount.marketing_name || cardAccount.name || "Cartão Open Finance",
+      name: prev?.userEdited ? prev.name : (cardAccount.marketing_name || cardAccount.name || "Cartão Open Finance"),
       brand: pluggyCardBrand(cardAccount),
       limit: pluggyCardLimit(cardAccount),
-      closingDay: pluggyClosingDay(cardAccount),
-      dueDay: pluggyDueDay(cardAccount),
-      color: pluggyColor(cardAccount.account_id),
-      accountId: existingAccountIds.has(linkedAccountId) ? linkedAccountId : "",
-      autoPay: false,
+      // Vencimento/fechamento: mantém edição manual se o usuário mexeu.
+      closingDay: prev?.userEdited && prev.closingDay ? prev.closingDay : pluggyClosingDay(cardAccount, bill),
+      dueDay: prev?.userEdited && prev.dueDay ? prev.dueDay : pluggyDueDay(cardAccount, bill),
+      color: prev?.color || pluggyColor(cardAccount.account_id),
+      accountId: prev?.accountId ?? (existingAccounts.has(linkedAccountId) ? linkedAccountId : ""),
+      autoPay: prev?.autoPay ?? false,
+      invoiceAmount: bill ? Number(bill.total_amount ?? 0) : Math.abs(Number(cardAccount.balance ?? 0)),
+      invoiceDueDate: bill?.due_date || null,
       source: "pluggy",
       pluggyAccountId: cardAccount.account_id,
       pluggyItemId: cardAccount.item_id,
+      userEdited: prev?.userEdited ?? false,
       updatedAt: new Date().toISOString()
     };
-    if (existingCardIds.has(id)) {
-      state.cards = state.cards.map((current) => current.id === id ? { ...current, ...next } : current);
+    if (prev) {
+      Object.assign(prev, next);
       updatedCards++;
     } else {
       state.cards.push(next);
-      existingCardIds.add(id);
+      existingCards.set(id, next);
       addedCards++;
     }
   }
 
+  // ---- Transações (classificadas automaticamente) ----
   for (const transaction of transactions || []) {
     if (!transaction.tx_id || !transaction.date) continue;
     const id = stablePluggyId("pluggy_tx", transaction.tx_id);
     const accountId = stablePluggyId("pluggy_acc", transaction.account_id);
     const cardId = stablePluggyId("pluggy_card", transaction.account_id);
-    const isCard = existingCardIds.has(cardId);
+    const isCard = existingCards.has(cardId);
     const type = mapPluggyTransactionType(transaction);
     const amount = Math.abs(Number(transaction.amount ?? 0));
     if (!amount) continue;
+    const prev = existingTx.get(id);
+
+    // Prioridade: edição manual do usuário > classificação automática.
+    const classified = (prev && prev.userClassified)
+      ? { categoryId: prev.categoryId, subcategory: prev.subcategory }
+      : classifyPluggyTransaction(transaction, type);
+
     const next = {
       id,
       type,
@@ -646,29 +797,72 @@ function importOpenFinanceSnapshot({ accounts = [], cards = [], transactions = [
       description: transaction.description || transaction.raw?.description || "Transação Open Finance",
       amount: Math.round(amount * 100) / 100,
       currency: transaction.currency_code || "BRL",
-      accountId: isCard ? "" : (existingAccountIds.has(accountId) ? accountId : ""),
+      accountId: isCard ? "" : (existingAccounts.has(accountId) ? accountId : ""),
       cardId: isCard ? cardId : "",
-      categoryId: category.id,
-      subcategory: transaction.category || (type === "income" ? "Receita" : isCard ? "Cartão" : "Banco"),
+      categoryId: classified.categoryId,
+      subcategory: classified.subcategory,
+      paymentMethod: isCard ? "credit" : "pix",
       tags: "open-finance,pluggy",
       location: "",
-      note: "Importado automaticamente via Open Finance",
+      note: transaction.pending ? "Pendente · Open Finance" : "Importado via Open Finance",
       recurring: false,
       attachmentName: "",
       source: "pluggy",
+      userClassified: prev?.userClassified ?? false,
       pluggyTransactionId: transaction.tx_id,
       pluggyAccountId: transaction.account_id,
-      createdAt: transaction.created_at || new Date().toISOString(),
+      createdAt: transaction.created_at || prev?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    if (existingTxIds.has(id)) {
-      state.transactions = state.transactions.map((current) => current.id === id ? { ...current, ...next } : current);
+    if (prev) {
+      Object.assign(prev, next);
       updatedTransactions++;
     } else {
       state.transactions.push(next);
-      existingTxIds.add(id);
+      existingTx.set(id, next);
       addedTransactions++;
     }
+  }
+
+  // ---- Investimentos ----
+  const invMap = new Map(state.investments.map((i) => [i.id, i]));
+  for (const inv of investments || []) {
+    const id = stablePluggyId("pluggy_inv", inv.investment_id);
+    const next = {
+      id,
+      name: inv.name || "Investimento",
+      type: inv.type || "",
+      subtype: inv.subtype || "",
+      balance: Number(inv.balance ?? inv.amount ?? 0),
+      currency: inv.currency_code || "BRL",
+      source: "pluggy",
+      pluggyItemId: inv.item_id,
+      updatedAt: new Date().toISOString()
+    };
+    const prev = invMap.get(id);
+    if (prev) Object.assign(prev, next);
+    else { state.investments.push(next); invMap.set(id, next); }
+  }
+
+  // ---- Empréstimos / financiamentos ----
+  const loanMap = new Map(state.loans.map((l) => [l.id, l]));
+  for (const loan of loans || []) {
+    const id = stablePluggyId("pluggy_loan", loan.loan_id);
+    const next = {
+      id,
+      name: loan.product_name || "Empréstimo",
+      contractNumber: loan.contract_number || "",
+      outstanding: Number(loan.outstanding_balance ?? 0),
+      installment: Number(loan.installment_amount ?? 0),
+      dueDate: loan.due_date || null,
+      currency: loan.currency_code || "BRL",
+      source: "pluggy",
+      pluggyItemId: loan.item_id,
+      updatedAt: new Date().toISOString()
+    };
+    const prev = loanMap.get(id);
+    if (prev) Object.assign(prev, next);
+    else { state.loans.push(next); loanMap.set(id, next); }
   }
 
   state.transactions.sort(sortByDateDesc);
@@ -677,11 +871,14 @@ function importOpenFinanceSnapshot({ accounts = [], cards = [], transactions = [
   if (getActiveView() !== "openfinance") render();
 
   const totalChanged = addedAccounts + updatedAccounts + addedCards + updatedCards + addedTransactions + updatedTransactions;
-  if (!totalChanged) return { message: "Open Finance sincronizado sem novos dados para importar." };
+  if (!totalChanged && !(investments || []).length && !(loans || []).length) {
+    return { message: "Open Finance sincronizado sem novos dados para importar." };
+  }
   return {
-    message: `Open Finance importado: ${addedAccounts + updatedAccounts} conta(s), ${addedCards + updatedCards} cartão(ões), ${addedTransactions + updatedTransactions} lançamento(s).`
+    message: `Open Finance importado: ${addedAccounts + updatedAccounts} conta(s), ${addedCards + updatedCards} cartão(ões), ${addedTransactions + updatedTransactions} lançamento(s), ${(investments || []).length} investimento(s).`
   };
 }
+
 
 function createSeedState() {
   const month = currentMonth();
@@ -1068,6 +1265,85 @@ function renderCards(container) {
     if (button.dataset.action === "delete-card") deleteCard(button.dataset.id);
     if (button.dataset.action === "pay-card") payCardInvoice(button.dataset.id, button.dataset.month);
   });
+}
+
+// ---------------- Investimentos (Open Finance) ------------------------------
+function investmentClass(inv) {
+  const t = `${inv.type || ""} ${inv.subtype || ""} ${inv.name || ""}`.toLowerCase();
+  if (/(acao|ações|stock|equity|fii|reit)/.test(t)) return "Renda variável";
+  if (/(tesouro|cdb|lci|lca|renda fixa|fixed|debenture|deb)/.test(t)) return "Renda fixa";
+  if (/(fundo|fund)/.test(t)) return "Fundos";
+  if (/(previd|pgbl|vgbl)/.test(t)) return "Previdência";
+  if (/(cripto|crypto|bitcoin|btc)/.test(t)) return "Cripto";
+  return "Outros";
+}
+
+function renderInvestments(container) {
+  const investments = Array.isArray(state.investments) ? state.investments : [];
+  const loans = Array.isArray(state.loans) ? state.loans : [];
+  const total = investments.reduce((sum, i) => sum + convertToBase(i.balance, i.currency), 0);
+
+  // Agrupa por classe para classificar automaticamente os valores investidos.
+  const byClass = new Map();
+  for (const inv of investments) {
+    const cls = investmentClass(inv);
+    const cur = byClass.get(cls) || { total: 0, count: 0 };
+    cur.total += convertToBase(inv.balance, inv.currency);
+    cur.count += 1;
+    byClass.set(cls, cur);
+  }
+  const groups = Array.from(byClass.entries()).sort((a, b) => b[1].total - a[1].total);
+
+  container.innerHTML = `
+    <section class="metric-grid">
+      ${metricCard("Total investido", money(total), `${investments.length} posição(ões) via Open Finance`, "positive")}
+      ${metricCard("Classes de ativos", String(groups.length), "Classificação automática", "")}
+      ${metricCard("Empréstimos", money(loans.reduce((s, l) => s + convertToBase(l.outstanding, l.currency), 0)), `${loans.length} contrato(s)`, loans.length ? "negative" : "")}
+    </section>
+
+    ${groups.length ? `
+    <section class="panel">
+      <div class="panel-header"><div><h2>Alocação por classe</h2><p>Distribuição automática dos valores investidos.</p></div></div>
+      <ul class="stack-list">
+        ${groups.map(([cls, g]) => {
+          const pct = total ? Math.round((g.total / total) * 100) : 0;
+          return `
+            <li>
+              <div class="item-title"><strong>${escapeHtml(cls)}</strong><span>${money(g.total)} · ${pct}%</span></div>
+              <div class="progress" style="--value:${pct}%"><span></span></div>
+              <small class="muted">${g.count} ativo(s)</small>
+            </li>`;
+        }).join("")}
+      </ul>
+    </section>` : ""}
+
+    <section class="card-grid">
+      ${investments.length ? investments.map((inv) => `
+        <article class="item-card">
+          <div class="item-title">
+            <div>
+              <span class="inline-group"><strong>${escapeHtml(inv.name || "Investimento")}</strong></span>
+              <p class="muted">${escapeHtml(investmentClass(inv))}${inv.subtype ? " · " + escapeHtml(inv.subtype) : ""}</p>
+            </div>
+            <span class="pill">Open Finance</span>
+          </div>
+          <strong>${money(inv.balance, inv.currency)}</strong>
+        </article>
+      `).join("") : emptyState("Nenhum investimento sincronizado. Conecte um banco em Open Finance e sincronize.")}
+    </section>
+
+    ${loans.length ? `
+    <section class="panel">
+      <div class="panel-header"><div><h2>Empréstimos e financiamentos</h2><p>Contratos trazidos do Open Finance.</p></div></div>
+      <ul class="stack-list">
+        ${loans.map((l) => `
+          <li>
+            <div class="item-title"><strong>${escapeHtml(l.name || "Empréstimo")}</strong><span>${money(l.outstanding, l.currency)}</span></div>
+            <small class="muted">Parcela ${money(l.installment, l.currency)}${l.dueDate ? " · vence " + formatShortDate(l.dueDate) : ""}${l.contractNumber ? " · contrato " + escapeHtml(l.contractNumber) : ""}</small>
+          </li>`).join("")}
+      </ul>
+    </section>` : ""}
+  `;
 }
 
 function renderCardArticle(card) {
@@ -1678,6 +1954,14 @@ function openTransactionModal(transactionId = "") {
       }
       createInstallmentPurchase(next, installments);
       return true;
+    }
+
+    // Aprendizado: se o usuário reclassificou um lançamento do Open Finance,
+    // marca como manual e ensina a regra para as próximas sincronizações.
+    if (existing && existing.source === "pluggy" &&
+        (existing.categoryId !== next.categoryId || existing.subcategory !== next.subcategory)) {
+      next.userClassified = true;
+      learnOpenFinanceCategory(next);
     }
 
     upsertTransaction(next, existing);
@@ -2612,7 +2896,9 @@ function monthlyTotals(month) {
 }
 
 function totalPatrimony() {
-  return state.accounts.reduce((sum, account) => sum + convertToBase(account.balance, account.currency), 0);
+  const accountsTotal = state.accounts.reduce((sum, account) => sum + convertToBase(account.balance, account.currency), 0);
+  const investmentsTotal = (state.investments || []).reduce((sum, inv) => sum + convertToBase(inv.balance, inv.currency), 0);
+  return accountsTotal + investmentsTotal;
 }
 
 function getMonthTransactions(month) {

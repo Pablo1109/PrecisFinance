@@ -127,22 +127,36 @@ export async function listRemoteItems(supabaseClient) {
 }
 
 // Sincroniza um item específico (contas, transações, cartões, investimentos).
-export async function syncItem(supabaseClient, itemId) {
+export async function syncItem(supabaseClient, itemId, { full = false } = {}) {
   const { data, error } = await supabaseClient.functions.invoke("pluggy-sync", {
-    body: { itemId },
+    body: { itemId, full },
   });
   if (error || data?.error) throw new Error(`pluggy-sync: ${getFunctionError(error, data)}`);
   return data;
 }
 
-// Sincroniza todos os items conectados pelo usuário.
-export async function syncAll(supabaseClient) {
+// Sincroniza TODOS os items — agora centralizado no servidor (pluggy-sync-all).
+// Faz fallback para o loop no cliente se a função server-side não existir ainda.
+export async function syncAll(supabaseClient, { full = false } = {}) {
+  const { data, error } = await supabaseClient.functions.invoke("pluggy-sync-all", {
+    body: { full },
+  });
+
+  if (!error && data && !data.error) {
+    const results = data.results ?? [];
+    const errors = results
+      .filter((r) => (r.errors || []).length > 0)
+      .map((r) => ({ itemId: r.itemId, error: (r.errors || []).map((e) => `${e.step}: ${e.message}`).join(" | ") }));
+    return { items: data.synced ?? 0, total: data.total ?? results.length, errors, totals: data.totals };
+  }
+
+  // Fallback: função nova ainda não publicada — usa o modo antigo.
   const remote = await listRemoteItems(supabaseClient);
   let ok = 0;
   const errors = [];
   for (const it of remote) {
     try {
-      await syncItem(supabaseClient, it.itemId);
+      await syncItem(supabaseClient, it.itemId, { full });
       ok++;
     } catch (e) {
       console.error("sync falhou", it.itemId, e);
@@ -151,6 +165,7 @@ export async function syncAll(supabaseClient) {
   }
   return { items: ok, total: remote.length, errors };
 }
+
 
 // ---------------- Leitura dos dados (RLS já filtra por usuário) --------------
 
@@ -196,6 +211,85 @@ export async function getPluggyInvestments(supabaseClient) {
   return data ?? [];
 }
 
+export async function getPluggyBills(supabaseClient) {
+  const { data, error } = await supabaseClient
+    .from("pluggy_bills")
+    .select("*")
+    .order("due_date", { ascending: false });
+  if (error) {
+    console.warn("[pluggy] getPluggyBills:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function getPluggyLoans(supabaseClient) {
+  const { data, error } = await supabaseClient
+    .from("pluggy_loans")
+    .select("*")
+    .order("due_date", { ascending: true });
+  if (error) {
+    console.warn("[pluggy] getPluggyLoans:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function getSyncLogs(supabaseClient, { limit = 30 } = {}) {
+  const { data, error } = await supabaseClient
+    .from("pluggy_sync_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[pluggy] getSyncLogs:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+// ---------------- Aprendizado de categorias ---------------------------------
+
+export async function getCategoryRules(supabaseClient) {
+  const { data, error } = await supabaseClient
+    .from("pluggy_category_rules")
+    .select("*");
+  if (error) {
+    console.warn("[pluggy] getCategoryRules:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+// Salva/atualiza uma regra de categoria aprendida (UPSERT por padrão).
+export async function saveCategoryRule(supabaseClient, userId, { matchType, pattern, categoryId, subcategory }) {
+  if (!userId || !pattern) return;
+  const { error } = await supabaseClient
+    .from("pluggy_category_rules")
+    .upsert(
+      {
+        user_id: userId,
+        match_type: matchType || "keyword",
+        pattern: String(pattern).toLowerCase().trim(),
+        category_id: categoryId || null,
+        subcategory: subcategory || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,match_type,pattern" },
+    );
+  if (error) console.warn("[pluggy] saveCategoryRule:", error.message);
+}
+
+// Persiste o override de categoria numa transação do Open Finance.
+export async function setTransactionCategory(supabaseClient, txId, { category, subcategory }) {
+  if (!txId) return;
+  const { error } = await supabaseClient
+    .from("pluggy_transactions")
+    .update({ user_category: category || null, user_subcategory: subcategory || null })
+    .eq("tx_id", txId);
+  if (error) console.warn("[pluggy] setTransactionCategory:", error.message);
+}
+
 // Atualiza o rótulo "Dono" de um item (ex.: "Eu" / "Namorada").
 export async function setItemOwnerLabel(supabaseClient, itemId, label) {
   const { error } = await supabaseClient
@@ -204,3 +298,4 @@ export async function setItemOwnerLabel(supabaseClient, itemId, label) {
     .eq("item_id", itemId);
   if (error) throw error;
 }
+

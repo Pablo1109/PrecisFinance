@@ -1,5 +1,6 @@
-// Sincroniza os dados de um item Pluggy para o Supabase.
-// Chamado pelo frontend logo após conectar um banco (onSuccess do widget).
+// Sincroniza os dados de UM item Pluggy para o Supabase via SyncService.
+// Chamado pelo frontend logo após conectar um banco (onSuccess do widget)
+// ou ao clicar em "Atualizar" numa conexão.
 import {
   adminClient,
   corsHeaders,
@@ -34,10 +35,14 @@ Deno.serve(async (req) => {
       return json({ error: "Item não pertence a este usuário" }, 403);
     }
 
-    const result = await syncItem(admin, apiKey, user.id, itemId);
-    return json({ ok: true, ...result });
+    const result = await syncItem(admin, apiKey, user.id, itemId, {
+      incremental: body?.full ? false : true,
+    });
+
+    // ok=true mesmo com erros parciais: o front decide o que mostrar.
+    return json({ ok: result.errors.length === 0, result });
   } catch (e) {
     console.error(e);
-    return json({ error: String(e) }, 500);
+    return json({ error: String(e instanceof Error ? e.message : e) }, 500);
   }
 });
