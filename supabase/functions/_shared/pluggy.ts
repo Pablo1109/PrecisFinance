@@ -17,11 +17,17 @@ export function json(body: unknown, status = 200) {
   });
 }
 
+function requireEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) throw new Error(`Variável de ambiente ausente: ${name}`);
+  return value;
+}
+
 // Cliente admin (service_role) — ignora RLS. Só nas Edge Functions.
 export function adminClient(): SupabaseClient {
   return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requireEnv("SUPABASE_URL"),
+    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     { auth: { persistSession: false } },
   );
 }
@@ -32,8 +38,8 @@ export async function getUser(req: Request) {
   const token = authHeader.replace("Bearer ", "");
   if (!token) return null;
   const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
+    requireEnv("SUPABASE_URL"),
+    requireEnv("SUPABASE_ANON_KEY"),
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data, error } = await supabase.auth.getUser(token);
@@ -47,8 +53,8 @@ export async function getApiKey(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      clientId: Deno.env.get("PLUGGY_CLIENT_ID"),
-      clientSecret: Deno.env.get("PLUGGY_CLIENT_SECRET"),
+      clientId: requireEnv("PLUGGY_CLIENT_ID"),
+      clientSecret: requireEnv("PLUGGY_CLIENT_SECRET"),
     }),
   });
   if (!res.ok) {
@@ -66,6 +72,12 @@ export async function pluggyGet(path: string, apiKey: string) {
     throw new Error(`Pluggy GET ${path} [${res.status}]: ${await res.text()}`);
   }
   return res.json();
+}
+
+async function checkedUpsert(admin: SupabaseClient, table: string, payload: any, options?: { onConflict?: string }) {
+  const query = options ? admin.from(table).upsert(payload, options) : admin.from(table).upsert(payload);
+  const { error } = await query;
+  if (error) throw new Error(`Supabase upsert ${table}: ${error.message}`);
 }
 
 // ISO date (YYYY-MM-DD) de N dias atrás.
@@ -88,8 +100,9 @@ export async function syncItem(
   const from = daysAgo(sinceDays);
 
   // ---- Item (metadados) ----
+  console.log("[pluggy-sync] item", { itemId, userId });
   const item = await pluggyGet(`/items/${itemId}`, apiKey);
-  await admin.from("pluggy_items").upsert({
+  await checkedUpsert(admin, "pluggy_items", {
     item_id: itemId,
     user_id: userId,
     connector_id: item.connector?.id ?? null,
@@ -103,11 +116,13 @@ export async function syncItem(
   });
 
   // ---- Contas (bancárias + cartões) ----
-  const accountsResp = await pluggyGet(`/accounts?itemId=${itemId}`, apiKey);
+  const accountsResp = await pluggyGet(`/accounts?itemId=${encodeURIComponent(itemId)}`, apiKey);
   const accounts = accountsResp.results ?? [];
+  let transactionCount = 0;
+  let investmentCount = 0;
 
   for (const acc of accounts) {
-    await admin.from("pluggy_accounts").upsert({
+    await checkedUpsert(admin, "pluggy_accounts", {
       account_id: acc.id,
       item_id: itemId,
       user_id: userId,
@@ -128,7 +143,7 @@ export async function syncItem(
     const pageSize = 500;
     while (true) {
       const txResp = await pluggyGet(
-        `/transactions?accountId=${acc.id}&from=${from}&page=${page}&pageSize=${pageSize}`,
+        `/transactions?accountId=${encodeURIComponent(acc.id)}&from=${encodeURIComponent(from)}&page=${page}&pageSize=${pageSize}`,
         apiKey,
       );
       const txs = txResp.results ?? [];
@@ -144,8 +159,10 @@ export async function syncItem(
           category: t.category ?? null,
           type: t.type ?? null,
           raw: t,
+          updated_at: new Date().toISOString(),
         }));
-        await admin.from("pluggy_transactions").upsert(rows);
+        await checkedUpsert(admin, "pluggy_transactions", rows, { onConflict: "tx_id" });
+        transactionCount += rows.length;
       }
       const totalPages = txResp.totalPages ?? 1;
       if (page >= totalPages) break;
@@ -155,10 +172,10 @@ export async function syncItem(
 
   // ---- Investimentos ----
   try {
-    const invResp = await pluggyGet(`/investments?itemId=${itemId}`, apiKey);
+    const invResp = await pluggyGet(`/investments?itemId=${encodeURIComponent(itemId)}`, apiKey);
     const investments = invResp.results ?? [];
     for (const inv of investments) {
-      await admin.from("pluggy_investments").upsert({
+      await checkedUpsert(admin, "pluggy_investments", {
         investment_id: inv.id,
         item_id: itemId,
         user_id: userId,
@@ -171,10 +188,12 @@ export async function syncItem(
         raw: inv,
         updated_at: new Date().toISOString(),
       });
+      investmentCount++;
     }
   } catch (_e) {
     // Nem todo conector tem investimentos — ignora silenciosamente.
   }
 
-  return { accounts: accounts.length };
+  console.log("[pluggy-sync] ok", { itemId, accounts: accounts.length, transactions: transactionCount, investments: investmentCount });
+  return { accounts: accounts.length, transactions: transactionCount, investments: investmentCount };
 }

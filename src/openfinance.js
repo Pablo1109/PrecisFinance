@@ -15,10 +15,15 @@ import {
 
 let _supabase = null;
 let _toast = (msg) => console.log("[openfinance]", msg);
+let _onSynced = null;
 
 export function setOpenFinanceContext({ supabaseClient, showToast } = {}) {
   if (supabaseClient) _supabase = supabaseClient;
   if (typeof showToast === "function") _toast = showToast;
+}
+
+export function setOpenFinanceIntegrationHandler(handler) {
+  _onSynced = typeof handler === "function" ? handler : null;
 }
 
 // ---------------- helpers de formatação -------------------------------------
@@ -84,7 +89,7 @@ export function renderOpenFinance(container) {
       await openPluggyConnect(_supabase, {
         onSuccess: async () => {
           _toast("Banco conectado! Sincronizando…");
-          await loadBody(body);
+          await loadBody(body, { importToApp: true });
         },
         onError: (e) => {
           console.error(e);
@@ -108,7 +113,7 @@ export function renderOpenFinance(container) {
       } else {
         _toast(`${res.items} item(ns) sincronizado(s).`);
       }
-      await loadBody(body);
+      await loadBody(body, { importToApp: res.total > 0 });
     } catch (e) {
       console.error(e);
       _toast("Erro ao sincronizar: " + (e?.message || e));
@@ -125,14 +130,14 @@ export function renderOpenFinance(container) {
         _toast("Atualizando conexão…");
         await syncItem(_supabase, id);
         _toast("Conexão atualizada.");
-        await loadBody(body);
+        await loadBody(body, { importToApp: true });
       } else if (ofAction === "reconnect-item") {
         _toast("Abrindo reconexão…");
         await openPluggyConnect(_supabase, {
           itemId: id,
           onSuccess: async () => {
             _toast("Reconectado! Sincronizando…");
-            await loadBody(body);
+            await loadBody(body, { importToApp: true });
           },
           onError: (e) => _toast("Erro: " + (e?.message || e)),
         });
@@ -160,14 +165,15 @@ export function renderOpenFinance(container) {
   loadBody(body);
 }
 
-async function loadBody(body) {
+async function loadBody(body, { importToApp = false } = {}) {
   try {
+    const transactionLimit = importToApp ? 5000 : 50;
     const [items, accounts, cards, investments, transactions] = await Promise.all([
       getPluggyItems(_supabase),
       getPluggyAccounts(_supabase),
       getPluggyCards(_supabase),
       getPluggyInvestments(_supabase),
-      getPluggyTransactions(_supabase, { limit: 50 }),
+      getPluggyTransactions(_supabase, { limit: transactionLimit }),
     ]);
 
     if (!items.length) {
@@ -182,12 +188,17 @@ async function loadBody(body) {
 
     const bankAccounts = accounts.filter((a) => a.type !== "CREDIT");
 
+    if (importToApp && _onSynced) {
+      const result = await _onSynced({ items, accounts, cards, investments, transactions });
+      if (result?.message) _toast(result.message);
+    }
+
     body.innerHTML = `
       ${sectionConnections(items)}
       ${sectionAccounts(bankAccounts)}
       ${sectionCards(cards)}
       ${sectionInvestments(investments)}
-      ${sectionTransactions(transactions)}
+      ${sectionTransactions(transactions.slice(0, 50))}
     `;
   } catch (e) {
     console.error(e);

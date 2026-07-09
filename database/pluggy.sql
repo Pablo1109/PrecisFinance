@@ -13,12 +13,14 @@ create table if not exists public.pluggy_items (
   connector_name   text,
   status           text,
   execution_status text,
+  owner_label      text,
   last_synced_at   timestamptz,
   error            text,
   raw              jsonb,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+alter table public.pluggy_items add column if not exists owner_label text;
 create index if not exists pluggy_items_user_idx on public.pluggy_items(user_id);
 
 -- ---------- Contas (bancárias e cartões) ------------------------------
@@ -52,8 +54,10 @@ create table if not exists public.pluggy_transactions (
   category       text,
   type           text,          -- DEBIT | CREDIT
   raw            jsonb,
-  created_at     timestamptz not null default now()
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
 );
+alter table public.pluggy_transactions add column if not exists updated_at timestamptz not null default now();
 create index if not exists pluggy_tx_user_idx on public.pluggy_transactions(user_id);
 create index if not exists pluggy_tx_account_idx on public.pluggy_transactions(account_id);
 create index if not exists pluggy_tx_date_idx on public.pluggy_transactions(date);
@@ -103,8 +107,14 @@ drop policy if exists pluggy_items_delete_own on public.pluggy_items;
 create policy pluggy_items_delete_own on public.pluggy_items
   for delete to authenticated using (auth.uid() = user_id);
 
+-- Permite editar apenas campos seguros do item pela interface (ex.: rótulo do dono).
+drop policy if exists pluggy_items_update_own on public.pluggy_items;
+create policy pluggy_items_update_own on public.pluggy_items
+  for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ---------- Grants ----------------------------------------------------
 grant select, delete on public.pluggy_items        to authenticated;
+grant update (owner_label) on public.pluggy_items  to authenticated;
 grant select          on public.pluggy_accounts     to authenticated;
 grant select          on public.pluggy_transactions to authenticated;
 grant select          on public.pluggy_investments  to authenticated;

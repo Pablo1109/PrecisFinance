@@ -11,20 +11,75 @@
 
 // ---------------- Widget Pluggy Connect --------------------------------------
 
+const PLUGGY_CONNECT_CDN_URLS = [
+  "https://cdn.pluggy.ai/pluggy-connect/v2.8.0/pluggy-connect.js",
+  "https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js",
+];
+
+let pluggyConnectLoadPromise = null;
+
+function getFunctionError(error, data) {
+  return error?.message || data?.error || data?.message || "Erro desconhecido";
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = Array.from(document.scripts).find((script) => script.src === src);
+    if (existing?.dataset.loaded === "true") {
+      resolve();
+      return;
+    }
+
+    const script = existing || document.createElement("script");
+    const timeout = window.setTimeout(() => reject(new Error(`Tempo esgotado ao carregar ${src}`)), 12000);
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      window.clearTimeout(timeout);
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error(`Falha ao carregar ${src}`));
+    };
+    if (!existing) document.head.appendChild(script);
+  });
+}
+
+async function ensurePluggyConnectLoaded() {
+  if (typeof window !== "undefined" && window.PluggyConnect) return;
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    throw new Error("Pluggy Connect só pode abrir no navegador.");
+  }
+  if (!pluggyConnectLoadPromise) {
+    pluggyConnectLoadPromise = (async () => {
+      const errors = [];
+      for (const src of PLUGGY_CONNECT_CDN_URLS) {
+        try {
+          await loadScript(src);
+          if (window.PluggyConnect) return;
+          errors.push(`${src}: carregou, mas window.PluggyConnect não apareceu`);
+        } catch (error) {
+          errors.push(error?.message || String(error));
+        }
+      }
+      throw new Error(`Widget Pluggy não carregou. Verifique bloqueadores/CDN. Detalhes: ${errors.join(" | ")}`);
+    })();
+  }
+  await pluggyConnectLoadPromise;
+}
+
 // Pede um connectToken à Edge Function e abre o widget.
 // opts: { onSuccess?, onError?, onClose?, itemId? (reconectar) }
 export async function openPluggyConnect(supabaseClient, opts = {}) {
-  if (typeof window === "undefined" || !window.PluggyConnect) {
-    throw new Error(
-      "Widget Pluggy não carregado. Confirme o <script> da Pluggy no index.html.",
-    );
-  }
+  await ensurePluggyConnectLoaded();
 
   const { data, error } = await supabaseClient.functions.invoke(
     "pluggy-connect-token",
     { body: opts.itemId ? { itemId: opts.itemId } : {} },
   );
-  if (error) throw error;
+  if (error || data?.error) throw new Error(`pluggy-connect-token: ${getFunctionError(error, data)}`);
   const accessToken = data?.accessToken;
   if (!accessToken) throw new Error("connect-token: accessToken vazio");
 
@@ -34,12 +89,13 @@ export async function openPluggyConnect(supabaseClient, opts = {}) {
     ...(opts.itemId ? { updateItem: opts.itemId } : {}),
     onSuccess: async (payload) => {
       try {
-        const item = payload?.item;
-        if (item?.id) {
+        const item = payload?.item || payload;
+        const itemId = item?.id || item?.itemId || payload?.itemId;
+        if (itemId) {
           // Sincroniza imediatamente pra não depender só do webhook.
-          await syncItem(supabaseClient, item.id);
+          await syncItem(supabaseClient, itemId);
         }
-        opts.onSuccess?.(item);
+        opts.onSuccess?.({ ...item, id: itemId || item?.id });
       } catch (e) {
         console.error("[pluggy] sync pós-conexão falhou", e);
         opts.onError?.(e);
@@ -54,7 +110,7 @@ export async function openPluggyConnect(supabaseClient, opts = {}) {
     },
   });
 
-  connect.init();
+  await connect.init();
   return connect;
 }
 
@@ -66,7 +122,7 @@ export async function listRemoteItems(supabaseClient) {
     "pluggy-list-items",
     { body: {} },
   );
-  if (error) throw error;
+  if (error || data?.error) throw new Error(`pluggy-list-items: ${getFunctionError(error, data)}`);
   return data?.items ?? [];
 }
 
@@ -75,7 +131,7 @@ export async function syncItem(supabaseClient, itemId) {
   const { data, error } = await supabaseClient.functions.invoke("pluggy-sync", {
     body: { itemId },
   });
-  if (error) throw error;
+  if (error || data?.error) throw new Error(`pluggy-sync: ${getFunctionError(error, data)}`);
   return data;
 }
 

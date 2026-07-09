@@ -1,4 +1,4 @@
-import { renderOpenFinance, setOpenFinanceContext } from "./openfinance.js";
+import { renderOpenFinance, setOpenFinanceContext, setOpenFinanceIntegrationHandler } from "./openfinance.js";
 
 const LEGACY_STORAGE_KEY = "precis-finance-state-v1";
 const CLOUD_CACHE_PREFIX = "precis-finance-cloud-cache-v1:";
@@ -132,6 +132,7 @@ async function initCloudAuth() {
     });
 
     setOpenFinanceContext({ supabaseClient, showToast: toast });
+    setOpenFinanceIntegrationHandler(importOpenFinanceSnapshot);
 
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
@@ -494,6 +495,191 @@ function normalizeState(value) {
     goals: value.goals || seed.goals,
     rules: value.rules || seed.rules,
     schemaVersion: value.schemaVersion || 1
+  };
+}
+
+function stablePluggyId(prefix, id) {
+  return `${prefix}_${String(id || "").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+function pluggyColor(seed = "") {
+  let hash = 0;
+  for (const char of String(seed)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return categoryColors[hash % categoryColors.length];
+}
+
+function pluggyAccountType(account) {
+  const subtype = String(account.subtype || "").replace(/_/g, " ").toLowerCase();
+  if (account.type === "CREDIT") return "Cartão de crédito";
+  if (subtype.includes("savings")) return "Poupança";
+  if (subtype.includes("checking")) return "Conta corrente";
+  if (subtype.includes("investment")) return "Investimento";
+  return account.type === "BANK" ? "Conta bancária" : (account.subtype || account.type || "Open Finance");
+}
+
+function pluggyCardBrand(account) {
+  const credit = account.credit_data || {};
+  return credit.brand || credit.network || "Open Finance";
+}
+
+function pluggyCardLimit(account) {
+  const credit = account.credit_data || {};
+  return Number(credit.creditLimit ?? credit.limit ?? credit.totalCreditLimit ?? 0) || 0;
+}
+
+function pluggyDueDay(account) {
+  const credit = account.credit_data || {};
+  const date = String(credit.balanceDueDate || credit.dueDate || "");
+  const day = Number(date.slice(-2));
+  return Number.isFinite(day) && day >= 1 && day <= 31 ? day : 10;
+}
+
+function pluggyClosingDay(account) {
+  const due = pluggyDueDay(account);
+  return due > 7 ? due - 7 : 25;
+}
+
+function ensureOpenFinanceCategory() {
+  const existing = state.categories.find((category) => category.id === "cat_openfinance");
+  if (existing) return existing;
+  const category = {
+    id: "cat_openfinance",
+    type: "expense",
+    name: "Open Finance",
+    subcategories: ["Banco", "Cartão", "Transferência", "Receita"],
+    color: "#4267b2"
+  };
+  state.categories.push(category);
+  return category;
+}
+
+function mapPluggyTransactionType(transaction) {
+  const rawType = String(transaction.type || transaction.raw?.type || "").toUpperCase();
+  const amount = Number(transaction.amount ?? 0);
+  if (rawType === "CREDIT" || amount > 0) return "income";
+  if (rawType === "DEBIT" || amount < 0) return "expense";
+  return "expense";
+}
+
+function importOpenFinanceSnapshot({ accounts = [], cards = [], transactions = [] } = {}) {
+  if (!state) return { message: "Estado financeiro ainda não carregado." };
+
+  const category = ensureOpenFinanceCategory();
+  const allAccounts = accounts || [];
+  const creditAccountIds = new Set((cards || []).map((card) => card.account_id));
+  const existingAccountIds = new Set(state.accounts.map((account) => account.id));
+  const existingCardIds = new Set(state.cards.map((card) => card.id));
+  const existingTxIds = new Set(state.transactions.map((transaction) => transaction.id));
+  let addedAccounts = 0;
+  let updatedAccounts = 0;
+  let addedCards = 0;
+  let updatedCards = 0;
+  let addedTransactions = 0;
+  let updatedTransactions = 0;
+
+  for (const account of allAccounts) {
+    if (creditAccountIds.has(account.account_id) || account.type === "CREDIT") continue;
+    const id = stablePluggyId("pluggy_acc", account.account_id);
+    const next = {
+      id,
+      name: account.marketing_name || account.name || "Conta Open Finance",
+      type: pluggyAccountType(account),
+      currency: account.currency_code || "BRL",
+      balance: Number(account.balance ?? 0),
+      color: pluggyColor(account.account_id),
+      source: "pluggy",
+      pluggyAccountId: account.account_id,
+      pluggyItemId: account.item_id,
+      updatedAt: new Date().toISOString()
+    };
+    if (existingAccountIds.has(id)) {
+      state.accounts = state.accounts.map((current) => current.id === id ? { ...current, ...next } : current);
+      updatedAccounts++;
+    } else {
+      state.accounts.push(next);
+      existingAccountIds.add(id);
+      addedAccounts++;
+    }
+  }
+
+  for (const cardAccount of cards || []) {
+    const id = stablePluggyId("pluggy_card", cardAccount.account_id);
+    const linkedAccountId = stablePluggyId("pluggy_acc", cardAccount.account_id);
+    const next = {
+      id,
+      name: cardAccount.marketing_name || cardAccount.name || "Cartão Open Finance",
+      brand: pluggyCardBrand(cardAccount),
+      limit: pluggyCardLimit(cardAccount),
+      closingDay: pluggyClosingDay(cardAccount),
+      dueDay: pluggyDueDay(cardAccount),
+      color: pluggyColor(cardAccount.account_id),
+      accountId: existingAccountIds.has(linkedAccountId) ? linkedAccountId : "",
+      autoPay: false,
+      source: "pluggy",
+      pluggyAccountId: cardAccount.account_id,
+      pluggyItemId: cardAccount.item_id,
+      updatedAt: new Date().toISOString()
+    };
+    if (existingCardIds.has(id)) {
+      state.cards = state.cards.map((current) => current.id === id ? { ...current, ...next } : current);
+      updatedCards++;
+    } else {
+      state.cards.push(next);
+      existingCardIds.add(id);
+      addedCards++;
+    }
+  }
+
+  for (const transaction of transactions || []) {
+    if (!transaction.tx_id || !transaction.date) continue;
+    const id = stablePluggyId("pluggy_tx", transaction.tx_id);
+    const accountId = stablePluggyId("pluggy_acc", transaction.account_id);
+    const cardId = stablePluggyId("pluggy_card", transaction.account_id);
+    const isCard = existingCardIds.has(cardId);
+    const type = mapPluggyTransactionType(transaction);
+    const amount = Math.abs(Number(transaction.amount ?? 0));
+    if (!amount) continue;
+    const next = {
+      id,
+      type,
+      date: String(transaction.date).slice(0, 10),
+      description: transaction.description || transaction.raw?.description || "Transação Open Finance",
+      amount: Math.round(amount * 100) / 100,
+      currency: transaction.currency_code || "BRL",
+      accountId: isCard ? "" : (existingAccountIds.has(accountId) ? accountId : ""),
+      cardId: isCard ? cardId : "",
+      categoryId: category.id,
+      subcategory: transaction.category || (type === "income" ? "Receita" : isCard ? "Cartão" : "Banco"),
+      tags: "open-finance,pluggy",
+      location: "",
+      note: "Importado automaticamente via Open Finance",
+      recurring: false,
+      attachmentName: "",
+      source: "pluggy",
+      pluggyTransactionId: transaction.tx_id,
+      pluggyAccountId: transaction.account_id,
+      createdAt: transaction.created_at || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    if (existingTxIds.has(id)) {
+      state.transactions = state.transactions.map((current) => current.id === id ? { ...current, ...next } : current);
+      updatedTransactions++;
+    } else {
+      state.transactions.push(next);
+      existingTxIds.add(id);
+      addedTransactions++;
+    }
+  }
+
+  state.transactions.sort(sortByDateDesc);
+  persist();
+  hydratePeriodSelect();
+  if (getActiveView() !== "openfinance") render();
+
+  const totalChanged = addedAccounts + updatedAccounts + addedCards + updatedCards + addedTransactions + updatedTransactions;
+  if (!totalChanged) return { message: "Open Finance sincronizado sem novos dados para importar." };
+  return {
+    message: `Open Finance importado: ${addedAccounts + updatedAccounts} conta(s), ${addedCards + updatedCards} cartão(ões), ${addedTransactions + updatedTransactions} lançamento(s).`
   };
 }
 
@@ -1155,6 +1341,7 @@ function transactionListItem(transaction) {
 function transactionRow(transaction) {
   const category = findCategory(transaction.categoryId);
   const payment = paymentDisplay(transaction);
+  const isPluggy = transaction.source === "pluggy" || String(transaction.id || "").startsWith("pluggy_tx_");
   return `
     <tr>
       <td>${DATE_FORMATTER.format(parseLocalDate(transaction.date))}</td>
@@ -1168,8 +1355,10 @@ function transactionRow(transaction) {
       <td class="${amountClass(transaction.type)}">${signedMoney(transaction)}</td>
       <td>
         <div class="inline-group" style="justify-content:flex-end">
-          <button class="icon-button" type="button" title="Editar" data-action="edit-tx" data-id="${transaction.id}">✎</button>
-          <button class="icon-button" type="button" title="Excluir" data-action="delete-tx" data-id="${transaction.id}">×</button>
+          ${isPluggy ? `<span class="pill">Open Finance</span>` : `
+            <button class="icon-button" type="button" title="Editar" data-action="edit-tx" data-id="${transaction.id}">✎</button>
+            <button class="icon-button" type="button" title="Excluir" data-action="delete-tx" data-id="${transaction.id}">×</button>
+          `}
         </div>
       </td>
     </tr>
@@ -1177,6 +1366,7 @@ function transactionRow(transaction) {
 }
 
 function accountCard(account) {
+  const isPluggy = account.source === "pluggy" || String(account.id || "").startsWith("pluggy_acc_");
   return `
     <article class="item-card">
       <div class="item-title">
@@ -1189,8 +1379,10 @@ function accountCard(account) {
       <strong>${money(account.balance, account.currency)}</strong>
       <small class="muted">Convertido: ${money(convertToBase(account.balance, account.currency))}</small>
       <div class="inline-group">
-        <button class="secondary-action" type="button" data-action="edit-account" data-id="${account.id}">Editar</button>
-        <button class="danger-action" type="button" data-action="delete-account" data-id="${account.id}">Excluir</button>
+        ${isPluggy ? `<span class="pill">Open Finance</span>` : `
+          <button class="secondary-action" type="button" data-action="edit-account" data-id="${account.id}">Editar</button>
+          <button class="danger-action" type="button" data-action="delete-account" data-id="${account.id}">Excluir</button>
+        `}
       </div>
     </article>
   `;
@@ -2066,6 +2258,7 @@ function deleteTransaction(id) {
 }
 
 function applyTransactionImpact(transaction, direction) {
+  if (transaction.source === "pluggy" || String(transaction.id || "").startsWith("pluggy_tx_")) return;
   if (transaction.date > today()) return;
   const account = findAccount(transaction.accountId);
   if (transaction.type === "income" && account) account.balance += transaction.amount * direction;
