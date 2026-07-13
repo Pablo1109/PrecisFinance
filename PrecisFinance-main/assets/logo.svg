@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" role="img" aria-label="Precis Finance">
+  <defs>
+    <linearGradient id="pfg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="55%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <!-- Mark: precision target + rising chart -->
+  <g transform="translate(4,4)">
+    <rect width="48" height="48" rx="12" fill="url(#pfg)"/>
+    <circle cx="24" cy="24" r="13" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="2"/>
+    <circle cx="24" cy="24" r="6.5" fill="none" stroke="#ffffff" stroke-width="2"/>
+    <circle cx="24" cy="24" r="2" fill="#ffffff"/>
+    <path d="M10 36 L18 28 L24 32 L34 20 L38 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Wordmark -->
+  <g font-family="Sora, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" fill="#0b1220">
+    <text x="62" y="30" font-size="19" font-weight="700" letter-spacing="-0.4">Precis</text>
+    <text x="122" y="30" font-size="19" font-weight="500" letter-spacing="-0.2" fill="#64748b">Finance</text>
+    <text x="62" y="44" font-size="9" font-weight="600" letter-spacing="2" fill="#6366f1">CONTROLE · PRECISÃO</text>
+  </g>
+</svg>

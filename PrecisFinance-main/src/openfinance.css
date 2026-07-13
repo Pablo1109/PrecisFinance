@@ -1,0 +1,21 @@
+/* CSS complementar da tela Open Finance.
+   Cole este conteúdo no FINAL do seu src/styles.css. */
+
+.section-title {
+  margin: 22px 0 12px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.section-title:first-child {
+  margin-top: 4px;
+}
+.section-title .muted {
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+/* pilha vertical dentro dos cartões de conexão */
+.item-card .actions-row {
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
