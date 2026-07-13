@@ -76,4 +76,4 @@ Ao final de cada sync, itens que precisam de atenção humana aparecem aqui:
 
 ## Sync incremental
 
-`pluggy_accounts.last_tx_synced_at` guarda o último ciclo. A edge function `pluggy-sync` puxa `/transactions?from=<since>` e usa `UPSERT` via `external_hash` — zero duplicidade.
+`pluggy_accounts.last_tx_synced_at` guarda o último ciclo. A edge function `pluggy-sync` puxa `/v2/transactions?dateFrom=<since>` (paginação por cursor) e usa `UPSERT` via `external_hash` — zero duplicidade.

@@ -442,18 +442,21 @@ export async function projectItemToPrecis(
       since = d.toISOString().slice(0, 10);
     }
 
-    let page = 1;
-    while (page <= 200) {
-      const txRes = await pluggyFetch<{ results: any[]; totalPages?: number }>(
-        `/transactions?accountId=${encodeURIComponent(acc.id)}&from=${since}&page=${page}&pageSize=500`,
-        ctx.apiKey,
-      );
+    // /v2/transactions — paginação por cursor (legado /transactions depreciado)
+    let txPath =
+      `/v2/transactions?accountId=${encodeURIComponent(acc.id)}&dateFrom=${encodeURIComponent(since)}`;
+    let txGuard = 0;
+    while (txPath && txGuard < 200) {
+      txGuard++;
+      const txRes = await pluggyFetch<{ results?: any[]; next?: string | null }>(txPath, ctx.apiKey);
       for (const tx of txRes.results ?? []) {
         await upsertEntryFromTransaction(admin, ctx, acc, tx, classCtx);
       }
-      const totalPages = txRes.totalPages ?? 1;
-      if (page >= totalPages) break;
-      page++;
+      const next = txRes.next;
+      if (!next) break;
+      txPath = next.startsWith("/")
+        ? next
+        : `/v2/transactions${next.startsWith("?") ? next : `?${next}`}`;
     }
 
     await admin

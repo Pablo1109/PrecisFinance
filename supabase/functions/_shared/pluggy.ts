@@ -86,6 +86,43 @@ export async function pluggyGet(path: string, apiKey: string) {
   return res.json();
 }
 
+type PluggyTxCursorPage = {
+  results?: unknown[];
+  next?: string | null;
+};
+
+/**
+ * Lista transações via GET /v2/transactions (paginação por cursor).
+ * O endpoint legado /transactions (page/pageSize) está depreciado.
+ */
+export async function pluggyListTransactions(
+  apiKey: string,
+  accountId: string,
+  dateFrom?: string,
+  onPage?: (txs: any[]) => Promise<void> | void,
+): Promise<any[]> {
+  const all: any[] = [];
+  let path =
+    `/v2/transactions?accountId=${encodeURIComponent(accountId)}` +
+    (dateFrom ? `&dateFrom=${encodeURIComponent(dateFrom)}` : "");
+
+  let guard = 0;
+  while (path && guard < 200) {
+    guard++;
+    const page = (await pluggyGet(path, apiKey)) as PluggyTxCursorPage;
+    const txs = (page.results ?? []) as any[];
+    if (txs.length) {
+      all.push(...txs);
+      if (onPage) await onPage(txs);
+    }
+    // `next` vem como query string completa, ex.: "?accountId=...&after=..."
+    const next = page.next;
+    if (!next) break;
+    path = next.startsWith("/") ? next : `/v2/transactions${next.startsWith("?") ? next : `?${next}`}`;
+  }
+  return all;
+}
+
 // ------------------------------------------------------------------ helpers
 
 const nowIso = () => new Date().toISOString();
@@ -298,38 +335,25 @@ export async function syncItem(
         }
       }
 
-      let page = 1;
-      const pageSize = 500;
       let accTxCount = 0;
-      while (true) {
-        const txResp = await pluggyGet(
-          `/transactions?accountId=${encodeURIComponent(acc.id)}&from=${encodeURIComponent(from)}&page=${page}&pageSize=${pageSize}`,
-          apiKey,
-        );
-        const txs = txResp.results ?? [];
-        if (txs.length > 0) {
-          const rows = txs.map((t: any) => ({
-            tx_id: t.id,
-            account_id: acc.id,
-            user_id: userId,
-            date: isoDate(t.date),
-            description: t.description ?? t.descriptionRaw ?? null,
-            amount: toNumber(t.amount),
-            currency_code: t.currencyCode ?? acc.currencyCode ?? "BRL",
-            category: t.category ?? null,
-            type: t.type ?? null,
-            pending: Boolean(t.status && String(t.status).toUpperCase() === "PENDING"),
-            raw: t,
-            updated_at: nowIso(),
-          }));
-          await checkedUpsert(admin, "pluggy_transactions", rows, { onConflict: "tx_id" });
-          accTxCount += rows.length;
-        }
-        const totalPages = txResp.totalPages ?? 1;
-        if (page >= totalPages) break;
-        page++;
-        if (page > 200) break; // trava de segurança
-      }
+      await pluggyListTransactions(apiKey, acc.id, from, async (txs) => {
+        const rows = txs.map((t: any) => ({
+          tx_id: t.id,
+          account_id: acc.id,
+          user_id: userId,
+          date: isoDate(t.date),
+          description: t.description ?? t.descriptionRaw ?? null,
+          amount: toNumber(t.amount),
+          currency_code: t.currencyCode ?? acc.currencyCode ?? "BRL",
+          category: t.category ?? null,
+          type: t.type ?? null,
+          pending: Boolean(t.status && String(t.status).toUpperCase() === "PENDING"),
+          raw: t,
+          updated_at: nowIso(),
+        }));
+        await checkedUpsert(admin, "pluggy_transactions", rows, { onConflict: "tx_id" });
+        accTxCount += rows.length;
+      });
 
       result.transactions += accTxCount;
       await admin
