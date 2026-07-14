@@ -13,6 +13,12 @@ export function defaultCategories() {
     { id: "cat_subs", type: "expense" as const, name: "Assinaturas", subcategories: ["Streaming", "Software"], color: "#c35f4d" },
     { id: "cat_cards", type: "expense" as const, name: "Cartões", subcategories: ["Fatura", "Tarifas"], color: "#5c7485" },
     { id: "cat_openfinance", type: "expense" as const, name: "Open Finance", subcategories: ["Banco", "Cartão"], color: "#4267b2" },
+    { id: "cat_transfer", type: "expense" as const, name: "Transferência", subcategories: ["Entre minhas contas", "PIX"], color: "#64748b" },
+    { id: "cat_investment", type: "expense" as const, name: "Investimento", subcategories: ["Caixinha", "CDB", "Renda Fixa"], color: "#0ea5e9" },
+    { id: "cat_fixed_rent", type: "fixed" as const, name: "Aluguel / Condomínio", subcategories: ["Habitação"], color: "#176b5b" },
+    { id: "cat_fixed_internet", type: "fixed" as const, name: "Internet / Telefone", subcategories: ["Comunicação"], color: "#4267b2" },
+    { id: "cat_fixed_energy", type: "fixed" as const, name: "Luz / Água", subcategories: ["Utilidades"], color: "#f0b84e" },
+    { id: "cat_fixed_streaming", type: "fixed" as const, name: "Assinaturas Fixas", subcategories: ["Serviços"], color: "#c35f4d" },
   ];
 }
 
@@ -34,6 +40,7 @@ export function createEmptyState(): FinanceState {
     rules: [],
     investments: [],
     loans: [],
+    recurringBills: [],
   };
 }
 
@@ -53,6 +60,7 @@ export function normalizeState(value: Partial<FinanceState> | null | undefined):
     rules: value.rules ?? seed.rules,
     investments: value.investments ?? [],
     loans: value.loans ?? [],
+    recurringBills: value.recurringBills ?? [],
     schemaVersion: 1,
   };
 }

@@ -263,6 +263,13 @@ export async function upsertEntryFromTransaction(
     classCtx,
   );
 
+  const { data: existing } = await admin
+    .from("precis_entries")
+    .select("*")
+    .eq("user_id", ctx.userId)
+    .eq("external_hash", hash)
+    .maybeSingle();
+
   const ofPayload: Record<string, unknown> = {
     user_id: ctx.userId,
     account_id: acc.type === "BANK" ? acc.id : null,
@@ -282,15 +289,10 @@ export async function upsertEntryFromTransaction(
     external_hash: hash,
     confidence: classification.confidence,
     raw: tx,
+    reviewed: existing ? (existing.reviewed ?? true) : false,
+    ignored: existing ? (existing.ignored ?? false) : false,
     updated_at: new Date().toISOString(),
   };
-
-  const { data: existing } = await admin
-    .from("precis_entries")
-    .select("*")
-    .eq("user_id", ctx.userId)
-    .eq("external_hash", hash)
-    .maybeSingle();
 
   const txOverrides = await loadOverridesForEntity(admin, ctx.userId, "transaction", [tx.id]);
   const fieldOv = txOverrides.get(tx.id) ?? new Map<string, unknown>();
@@ -442,24 +444,64 @@ export async function projectItemToPrecis(
       since = d.toISOString().slice(0, 10);
     }
 
-    let page = 1;
-    while (page <= 200) {
-      const txRes = await pluggyFetch<{ results: any[]; totalPages?: number }>(
-        `/transactions?accountId=${encodeURIComponent(acc.id)}&from=${since}&page=${page}&pageSize=500`,
-        ctx.apiKey,
-      );
+    // /v2/transactions — paginação por cursor (legado /transactions depreciado)
+    let txPath =
+      `/v2/transactions?accountId=${encodeURIComponent(acc.id)}&dateFrom=${encodeURIComponent(since)}`;
+    let txGuard = 0;
+    while (txPath && txGuard < 200) {
+      txGuard++;
+      const txRes = await pluggyFetch<{ results?: any[]; next?: string | null }>(txPath, ctx.apiKey);
       for (const tx of txRes.results ?? []) {
         await upsertEntryFromTransaction(admin, ctx, acc, tx, classCtx);
       }
-      const totalPages = txRes.totalPages ?? 1;
-      if (page >= totalPages) break;
-      page++;
+      const next = txRes.next;
+      if (!next) break;
+      txPath = next.startsWith("/")
+        ? next
+        : `/v2/transactions${next.startsWith("?") ? next : `?${next}`}`;
     }
 
     await admin
       .from("pluggy_accounts")
       .update({ last_tx_synced_at: new Date().toISOString() })
       .eq("account_id", acc.id);
+  }
+
+  // 4. Fetch and project Open Finance investments
+  try {
+    const invRes = await pluggyFetch<{ results: any[] }>(
+      `/investments?itemId=${encodeURIComponent(ctx.itemId)}`,
+      ctx.apiKey,
+    );
+    const fetchedIds = (invRes.results ?? []).map((inv) => inv.id);
+    const { data: existingInv } = await admin
+      .from("pluggy_investments")
+      .select("investment_id")
+      .eq("item_id", ctx.itemId);
+    
+    const existingIds = (existingInv ?? []).map((x: any) => x.investment_id);
+    const orphanInv = existingIds.filter((id) => !fetchedIds.includes(id));
+    if (orphanInv.length > 0) {
+      await admin.from("pluggy_investments").delete().in("investment_id", orphanInv);
+    }
+
+    for (const inv of invRes.results ?? []) {
+      await admin.from("pluggy_investments").upsert({
+        investment_id: inv.id,
+        item_id: ctx.itemId,
+        user_id: ctx.userId,
+        type: inv.type,
+        subtype: inv.subtype,
+        name: inv.name,
+        number: inv.number,
+        balance: Number(inv.balance || 0),
+        currency_code: inv.currencyCode || "BRL",
+        raw: inv,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error("Erro ao sincronizar investimentos do Pluggy:", err);
   }
 
   return ctx.counts;

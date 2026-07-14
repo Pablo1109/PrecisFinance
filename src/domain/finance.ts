@@ -1,4 +1,4 @@
-import type { FinanceState, Transaction } from "./types";
+import type { FinanceState, Transaction, Card } from "./types";
 
 export function currentMonth(): string {
   const n = new Date();
@@ -24,12 +24,42 @@ export function convertToBase(state: FinanceState, amount: number, currency: str
   return (amount * from) / to;
 }
 
+export function getTransactionInvoiceMonth(t: Transaction, cards: Card[]): string {
+  if (t.invoiceMonth) return t.invoiceMonth;
+  if (!t.cardId) return t.date.slice(0, 7);
+  const card = cards.find((c) => c.id === t.cardId);
+  if (!card || !card.closingDay) return t.date.slice(0, 7);
+
+  const [y, m, d] = t.date.split("-").map(Number);
+  let invoiceYear = y;
+  let invoiceMonth = m;
+
+  if (d > card.closingDay) {
+    invoiceMonth += 1;
+    if (invoiceMonth > 12) {
+      invoiceMonth = 1;
+      invoiceYear += 1;
+    }
+  }
+  return `${invoiceYear}-${String(invoiceMonth).padStart(2, "0")}`;
+}
+
+export function getInvoiceTransactions(state: FinanceState, month: string): Transaction[] {
+  return state.transactions.filter((t) => {
+    if (t.ignored) return false;
+    if (t.cardId) {
+      return getTransactionInvoiceMonth(t, state.cards) === month;
+    }
+    return t.date.slice(0, 7) === month;
+  });
+}
+
 export function getMonthTransactions(state: FinanceState, month: string): Transaction[] {
-  return state.transactions.filter((t) => t.date.slice(0, 7) === month);
+  return state.transactions.filter((t) => !t.ignored && t.date.slice(0, 7) === month);
 }
 
 export function monthlyTotals(state: FinanceState, month: string) {
-  return getMonthTransactions(state, month).reduce(
+  return getInvoiceTransactions(state, month).reduce(
     (acc, t) => {
       const value = convertToBase(state, t.amount, t.currency);
       if (t.type === "income") acc.income += value;
@@ -49,13 +79,13 @@ export function totalPatrimony(state: FinanceState): number {
 }
 
 export function cardSpent(state: FinanceState, cardId: string, month: string): number {
-  return getMonthTransactions(state, month)
+  return getInvoiceTransactions(state, month)
     .filter((t) => t.type === "expense" && t.cardId === cardId)
     .reduce((s, t) => s + convertToBase(state, t.amount, t.currency), 0);
 }
 
 export function cardPayments(state: FinanceState, cardId: string, month: string): number {
-  return getMonthTransactions(state, month)
+  return getInvoiceTransactions(state, month)
     .filter((t) => t.type === "transfer" && t.cardId === cardId)
     .reduce((s, t) => s + convertToBase(state, t.amount, t.currency), 0);
 }
@@ -65,7 +95,7 @@ export function cardOutstanding(state: FinanceState, cardId: string, month: stri
 }
 
 export function categorySpent(state: FinanceState, categoryId: string, month: string): number {
-  return getMonthTransactions(state, month)
+  return getInvoiceTransactions(state, month)
     .filter((t) => t.type === "expense" && t.categoryId === categoryId)
     .reduce((s, t) => s + convertToBase(state, t.amount, t.currency), 0);
 }

@@ -299,3 +299,55 @@ export async function setItemOwnerLabel(supabaseClient, itemId, label) {
   if (error) throw error;
 }
 
+// Deleta todas as conexões e limpa os dados unificados do Open Finance do banco do usuário.
+export async function disconnectAllOpenFinance(supabaseClient, userId) {
+  // 1. Deleta os itens conectores (desencadeia cascades para accounts, cards, investments)
+  const { error: err1 } = await supabaseClient
+    .from("pluggy_items")
+    .delete()
+    .eq("user_id", userId);
+  if (err1) throw err1;
+
+  // 2. Deleta as transações sincronizadas do Open Finance (source = 'openfinance')
+  const { error: err2 } = await supabaseClient
+    .from("precis_entries")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "openfinance");
+  if (err2) throw err2;
+}
+
+export async function deletePluggyItem(supabaseClient, itemId, userId) {
+  // 1. Obter todas as contas desse item
+  const { data: accounts } = await supabaseClient
+    .from("pluggy_accounts")
+    .select("account_id")
+    .eq("item_id", itemId);
+
+  const accountIds = (accounts ?? []).map((a) => a.account_id);
+
+  if (accountIds.length > 0) {
+    // 2. Deletar transações sincronizadas associadas
+    await supabaseClient
+      .from("precis_entries")
+      .delete()
+      .eq("user_id", userId)
+      .in("account_id", accountIds);
+
+    await supabaseClient
+      .from("precis_entries")
+      .delete()
+      .eq("user_id", userId)
+      .in("card_id", accountIds);
+  }
+
+  // 3. Deletar o item
+  const { error } = await supabaseClient
+    .from("pluggy_items")
+    .delete()
+    .eq("item_id", itemId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+}
+

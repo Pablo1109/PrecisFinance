@@ -7,14 +7,8 @@ const TITLES: Record<string, string> = {
   "/extrato": "Extrato unificado",
   "/contas": "Contas",
   "/cartoes": "Cartões",
-  "/cartoes-of": "Cartões Open Finance",
-  "/orcamentos": "Orçamentos",
-  "/metas": "Metas",
-  "/relatorios": "Relatórios",
-  "/automacoes": "Automações",
   "/open-finance": "Open Finance",
   "/correcao/open-finance": "Correção Open Finance",
-  "/seguranca": "Segurança",
 };
 
 export function PageTitle() {

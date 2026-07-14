@@ -3,6 +3,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { useFinance } from "@/context/FinanceContext";
 import {
   getPluggyAccounts,
   getPluggyBills,
@@ -12,6 +13,8 @@ import {
   openPluggyConnect,
   syncAll,
   syncItem,
+  disconnectAllOpenFinance,
+  deletePluggyItem,
 } from "../pluggy.js";
 import { money, fmtDate } from "@/lib/format";
 import { Link } from "react-router-dom";
@@ -22,6 +25,7 @@ type PluggyTx = { tx_id: string; date?: string; description?: string; amount?: n
 
 export function OpenFinancePage() {
   const { user, configured } = useAuth();
+  const { syncDatabase } = useFinance();
   const toast = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -48,7 +52,11 @@ export function OpenFinancePage() {
     setBusy(true);
     try {
       await openPluggyConnect(supabase, {
-        onSuccess: async () => { toast("Conectado!"); await refetch(); },
+        onSuccess: async () => {
+          toast("Conectado!");
+          await syncDatabase();
+          await refetch();
+        },
         onError: (e: unknown) => toast(String((e as Error)?.message || e)),
       });
     } catch (e) {
@@ -63,11 +71,48 @@ export function OpenFinancePage() {
     try {
       const r = await syncAll(supabase);
       toast(`Sincronizado: ${r.items}/${r.total} itens`);
+      await syncDatabase();
       await refetch();
       qc.invalidateQueries({ queryKey: ["cards"] });
       qc.invalidateQueries({ queryKey: ["entries"] });
     } catch (e) {
       toast(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteItem(itemId: string) {
+    if (!user) return;
+    if (!window.confirm("Deseja realmente desconectar e excluir esta conexão bancária? Todas as contas, faturas, investimentos e transações importadas por ela serão removidas do sistema.")) return;
+    setBusy(true);
+    try {
+      await deletePluggyItem(supabase, itemId, user.id);
+      toast("Conexão bancária excluída com sucesso!");
+      await syncDatabase();
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["cards"] });
+      qc.invalidateQueries({ queryKey: ["entries"] });
+    } catch (e) {
+      toast("Erro ao excluir conexão: " + String((e as Error).message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisconnectAll() {
+    if (!user) return;
+    if (!window.confirm("Tem certeza que deseja desconectar todas as contas e limpar as informações do Open Finance? Isso apagará todas as transações, saldos e cartões importados.")) return;
+    setBusy(true);
+    try {
+      await disconnectAllOpenFinance(supabase, user.id);
+      toast("Dados do Open Finance limpos com sucesso!");
+      await syncDatabase();
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["cards"] });
+      qc.invalidateQueries({ queryKey: ["entries"] });
+    } catch (e) {
+      toast("Erro ao limpar dados: " + String((e as Error).message || e));
     } finally {
       setBusy(false);
     }
@@ -92,8 +137,11 @@ export function OpenFinancePage() {
       <section className="actions-row">
         <button type="button" className="primary-action" disabled={busy} onClick={connect}>+ Conectar banco</button>
         <button type="button" className="secondary-action" disabled={busy} onClick={syncEverything}>↻ Sincronizar tudo</button>
+        <button type="button" className="secondary-action" disabled={busy} onClick={handleDisconnectAll} style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.2)", background: "rgba(239, 68, 68, 0.05)" }}>
+          🗑️ Limpar Open Finance
+        </button>
         <Link to="/correcao/open-finance" className="secondary-action">Correção OF</Link>
-        <Link to="/cartoes-of" className="secondary-action">Cartões OF</Link>
+        <Link to="/cartoes" className="secondary-action">Cartões</Link>
         <Link to="/extrato" className="secondary-action">Extrato unificado</Link>
       </section>
 
@@ -103,14 +151,42 @@ export function OpenFinancePage() {
             <h3>Conexões ({data?.items.length ?? 0})</h3>
             <ul className="stack-list">
               {(data?.items as PluggyItem[] ?? []).map((it) => (
-                <li key={it.item_id}>
-                  <strong>{it.connector_name || it.item_id}</strong>
-                  <span className="pill">{it.status}</span>
-                  <button type="button" className="ghost-action" onClick={() => syncItem(supabase, it.item_id).then(() => refetch())}>Sync</button>
+                <li key={it.item_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <strong>{it.connector_name || it.item_id}</strong>
+                    <span className="muted" style={{ fontSize: "0.8rem" }}>ID: {it.item_id}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <span className="pill" style={{ marginRight: 8 }}>{it.status}</span>
+                    <button
+                      type="button"
+                      className="ghost-action"
+                      disabled={busy}
+                      onClick={() =>
+                        syncItem(supabase, it.item_id)
+                          .then(() => syncDatabase())
+                          .then(() => refetch())
+                          .then(() => toast("Sincronizado com sucesso!"))
+                          .catch((e) => toast("Erro: " + String(e.message || e)))
+                      }
+                    >
+                      Sync
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-action"
+                      style={{ color: "var(--red)" }}
+                      disabled={busy}
+                      onClick={() => handleDeleteItem(it.item_id)}
+                    >
+                      Excluir
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           </section>
+
           <section className="two-col" style={{ marginTop: 16 }}>
             <article className="panel">
               <h3>Contas ({(data?.accounts as PluggyAccount[] ?? []).filter((a) => a.type !== "CREDIT").length})</h3>

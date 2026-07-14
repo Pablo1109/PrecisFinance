@@ -5,17 +5,18 @@ import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { TransactionsPage } from "@/pages/TransactionsPage";
 import { AccountsPage } from "@/pages/AccountsPage";
-import { CardsManualPage } from "@/pages/CardsManualPage";
 import { BudgetsPage } from "@/pages/BudgetsPage";
 import { GoalsPage } from "@/pages/GoalsPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { AutomationPage } from "@/pages/AutomationPage";
 import { SecurityPage } from "@/pages/SecurityPage";
 import { OpenFinancePage } from "@/pages/OpenFinancePage";
+import { InvestmentsPage } from "@/pages/InvestmentsPage";
 import { CardsPage } from "@/routes/CardsPage";
-import { CardDetailPage } from "@/routes/CardDetailPage";
 import { CorrectionPage } from "@/routes/CorrectionPage";
+import { FixedBillsPage } from "@/pages/FixedBillsPage";
 import { EntriesPage } from "@/routes/EntriesPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 
 export function AppRoutes() {
   return (
@@ -29,11 +30,12 @@ export function AppRoutes() {
           <Route path="lancamentos" element={<TransactionsPage />} />
           <Route path="extrato" element={<EntriesPage />} />
           <Route path="contas" element={<AccountsPage />} />
-          <Route path="cartoes" element={<CardsManualPage />} />
-          <Route path="cartoes-of" element={<CardsPage />} />
-          <Route path="cartoes-of/:cardId" element={<CardDetailPage />} />
+          <Route path="cartoes" element={<CardsPage />} />
+          <Route path="investimentos" element={<InvestmentsPage />} />
           <Route path="orcamentos" element={<BudgetsPage />} />
+          <Route path="contas-fixas" element={<FixedBillsPage />} />
           <Route path="metas" element={<GoalsPage />} />
+          <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="automacoes" element={<AutomationPage />} />
           <Route path="open-finance" element={<OpenFinancePage />} />

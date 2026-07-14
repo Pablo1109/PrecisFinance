@@ -37,7 +37,7 @@ export interface Card {
 
 export interface Category {
   id: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "fixed";
   name: string;
   subcategories: string[];
   color: string;
@@ -69,6 +69,8 @@ export interface Transaction {
   source?: "pluggy" | "manual";
   pluggyTransactionId?: string;
   userClassified?: boolean;
+  reviewed?: boolean;
+  ignored?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -118,6 +120,16 @@ export interface Loan {
   source?: string;
 }
 
+export interface RecurringBill {
+  id: string;
+  type?: "income" | "expense";
+  description: string;
+  amount: number;
+  dueDay: number;
+  categoryId: string;
+  createdAt?: string;
+}
+
 export interface FinanceState {
   schemaVersion: 1;
   settings: FinanceSettings;
@@ -130,6 +142,7 @@ export interface FinanceState {
   rules: Rule[];
   investments: Investment[];
   loans: Loan[];
+  recurringBills?: RecurringBill[];
 }
 
 export type SyncStatus = "desconectado" | "sincronizando" | "sincronizado" | "pendente" | "erro" | "somente local";
