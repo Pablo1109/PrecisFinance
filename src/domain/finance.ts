@@ -137,7 +137,7 @@ export function applyTransactionImpact(state: FinanceState, tx: Transaction, dir
   const account = state.accounts.find((a) => a.id === tx.accountId);
   if (tx.type === "income" && account) account.balance += tx.amount * direction;
   if (tx.type === "expense" && account && !tx.cardId) account.balance -= tx.amount * direction;
-  if (tx.type === "transfer" && account) {
+  if (tx.type === "transfer" && account && !tx.cardId) {
     account.balance -= tx.amount * direction;
     if (tx.destAccountId) {
       const dest = state.accounts.find((a) => a.id === tx.destAccountId);
