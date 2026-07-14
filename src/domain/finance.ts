@@ -49,8 +49,7 @@ export function monthlyTotals(state: FinanceState, month: string) {
     (acc, t) => {
       const value = convertToBase(state, t.amount, t.currency);
       if (t.type === "income") acc.income += value;
-      else if (t.type === "expense" && !t.cardId) acc.expense += value;
-      else if (t.type === "transfer" && t.cardId) acc.expense += value;
+      else if (t.type === "expense") acc.expense += value;
       acc.balance = acc.income - acc.expense;
       return acc;
     },
@@ -88,7 +87,7 @@ export function categorySpent(state: FinanceState, categoryId: string, month: st
 
 export function expenseByCategory(state: FinanceState, month: string) {
   const map = new Map<string, { name: string; color: string; total: number }>();
-  getMonthTransactions(state, month)
+  getInvoiceTransactions(state, month)
     .filter((t) => t.type === "expense")
     .forEach((t) => {
       const cat = state.categories.find((c) => c.id === t.categoryId) || { id: "none", name: "Sem categoria", color: "#65716d" };
@@ -216,9 +215,11 @@ export function applyTransactionImpact(state: FinanceState, tx: Transaction, dir
   const account = state.accounts.find((a) => a.id === tx.accountId);
   if (tx.type === "income" && account) account.balance += tx.amount * direction;
   if (tx.type === "expense" && account && !tx.cardId) account.balance -= tx.amount * direction;
-  if (tx.type === "transfer" && account && !tx.cardId) {
+  if (tx.type === "transfer" && account) {
+    // A transfer always deducts from the source account
     account.balance -= tx.amount * direction;
-    if (tx.destAccountId) {
+    // If it's a transfer to another account (not card payment), add to the destination account
+    if (tx.destAccountId && !tx.cardId) {
       const dest = state.accounts.find((a) => a.id === tx.destAccountId);
       if (dest) dest.balance += (tx.destAmount || tx.amount) * direction;
     }
