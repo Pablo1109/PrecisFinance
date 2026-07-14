@@ -11,9 +11,10 @@ export function FixedBillsPage() {
   
   const [activeTab, setActiveTab] = useState<RecurrenceTab>("expense");
   const [showAdd, setShowAdd] = useState(false);
+  const [editingBill, setEditingBill] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Form states
+  // Form states for adding
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState(10);
@@ -62,30 +63,30 @@ export function FixedBillsPage() {
   const projection = useMemo(() => {
     const nextMonth = shiftMonth(month, 1);
     
-    // Expected income = current income + recurring fixed incomes
-    const currentIncome = state.transactions
-      .filter((t) => t.date.slice(0, 7) === month && t.type === "income" && !t.ignored)
-      .reduce((s, t) => s + t.amount, 0);
+    // Saldo atual de todas as contas
+    const currentBankBalance = state.accounts.reduce((sum, a) => sum + a.balance, 0);
 
+    // Receitas fixas (incomes)
     const recurringIncomes = rawBills
       .filter((b) => b.type === "income")
       .reduce((s, b) => s + b.amount, 0);
 
-    const expectedIncome = currentIncome || recurringIncomes || 8000;
-
-    // Expected expenses = recurring bills (expenses) + next month card invoices
+    // Despesas fixas (recurring bills)
     const recurringExpenses = rawBills
       .filter((b) => (b.type || "expense") === "expense")
       .reduce((s, b) => s + b.amount, 0);
 
+    // Cartões do próximo mês (inclui parcelados)
     const nextMonthCards = state.cards.reduce((sum, c) => sum + cardSpent(state, c.id, nextMonth), 0);
     const expectedExpense = recurringExpenses + nextMonthCards;
 
-    const netForecast = expectedIncome - expectedExpense;
+    // Saldo final projetado = Saldo Atual + Receitas Fixas - Despesas Fixas - Fatura do Cartão
+    const netForecast = currentBankBalance + recurringIncomes - expectedExpense;
 
     return {
       nextMonth,
-      expectedIncome,
+      currentBankBalance,
+      recurringIncomes,
       expectedExpense,
       netForecast,
     };
@@ -118,6 +119,28 @@ export function FixedBillsPage() {
     setBusy(false);
   }
 
+  function handleEditSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingBill) return;
+    const fd = new FormData(e.currentTarget);
+    const description = String(fd.get("description") || "").trim();
+    const amountVal = Number(fd.get("amount"));
+    const dueDayVal = Number(fd.get("dueDay"));
+    const categoryId = String(fd.get("categoryId") || "");
+
+    update((s) => {
+      const b = (s.recurringBills || []).find((x) => x.id === editingBill.id);
+      if (b) {
+        b.description = description;
+        b.amount = amountVal;
+        b.dueDay = dueDayVal;
+        b.categoryId = categoryId;
+      }
+    });
+
+    setEditingBill(null);
+  }
+
   function handleDelete(id: string) {
     if (!window.confirm("Deseja realmente excluir este lançamento recorrente?")) return;
     update((s) => {
@@ -136,7 +159,7 @@ export function FixedBillsPage() {
           setCatId(activeCategories[0]?.id || "");
           setShowAdd(true);
         }}>
-          + Novo Lançamento Fixo
+          ➕ Novo Lançamento Fixo
         </button>
       </section>
 
@@ -178,13 +201,20 @@ export function FixedBillsPage() {
         </button>
       </div>
 
-      {/* Forecast widget */}
+      {/* Forecast widget with Account Cash Balance incorporated */}
       <section className="metric-grid" style={{ marginTop: 16 }}>
         <article className="metric-card patrimony">
-          <div className="metric-icon-wrap">📊</div>
+          <div className="metric-icon-wrap">💼</div>
+          <div>
+            <span>Saldo Atual das Contas</span>
+            <h3>{money(projection.currentBankBalance)}</h3>
+          </div>
+        </article>
+        <article className="metric-card income">
+          <div className="metric-icon-wrap">📈</div>
           <div>
             <span>Projeção de Receitas ({projection.nextMonth})</span>
-            <h3>{money(projection.expectedIncome)}</h3>
+            <h3>+{money(projection.recurringIncomes)}</h3>
           </div>
         </article>
         <article className="metric-card expense">
@@ -197,7 +227,7 @@ export function FixedBillsPage() {
         <article className={`metric-card balance ${projection.netForecast >= 0 ? "positive" : "negative"}`}>
           <div className="metric-icon-wrap">⚖️</div>
           <div>
-            <span>Saldo Líquido Projetado</span>
+            <span>Saldo Final Projetado ({projection.nextMonth})</span>
             <h3 style={{ color: projection.netForecast >= 0 ? "var(--green)" : "var(--red)" }}>
               {money(projection.netForecast)}
             </h3>
@@ -223,7 +253,7 @@ export function FixedBillsPage() {
                   <th>Categoria</th>
                   <th>Valor Previsto</th>
                   <th>Situação ({month})</th>
-                  <th style={{ width: 80 }}>Ações</th>
+                  <th style={{ width: 180, textAlign: "right" }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,14 +279,24 @@ export function FixedBillsPage() {
                         )}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="ghost-action"
-                          style={{ color: "var(--red)", fontSize: "0.8rem", padding: "4px 8px" }}
-                          onClick={() => handleDelete(b.id)}
-                        >
-                          Excluir
-                        </button>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className="ghost-action"
+                            style={{ fontSize: "0.8rem", padding: "4px 8px" }}
+                            onClick={() => setEditingBill(b)}
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-action"
+                            style={{ color: "var(--red)", fontSize: "0.8rem", padding: "4px 8px" }}
+                            onClick={() => handleDelete(b.id)}
+                          >
+                            🗑️ Excluir
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -272,7 +312,7 @@ export function FixedBillsPage() {
         <div className="quick-insert-backdrop" onClick={() => setShowAdd(false)}>
           <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
             <div className="quick-insert-header">
-              <h2>{activeTab === "expense" ? "Nova Conta Fixa" : "Nova Receita Fixa"}</h2>
+              <h2>{activeTab === "expense" ? "➕ Nova Conta Fixa" : "➕ Nova Receita Fixa"}</h2>
               <button type="button" className="close-btn" onClick={() => setShowAdd(false)}>×</button>
             </div>
             <form onSubmit={handleAdd} className="quick-insert-form">
@@ -323,7 +363,67 @@ export function FixedBillsPage() {
                 </select>
               </div>
               <button type="submit" className="primary-action" disabled={busy} style={{ marginTop: 12 }}>
-                Salvar Lançamento Fixo
+                💾 Salvar Recorrência
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingBill && (
+        <div className="quick-insert-backdrop" onClick={() => setEditingBill(null)}>
+          <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quick-insert-header">
+              <h2>✏️ Editar Lançamento Fixo</h2>
+              <button type="button" className="close-btn" onClick={() => setEditingBill(null)}>×</button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="quick-insert-form">
+              <div className="form-group">
+                <label>Descrição</label>
+                <input
+                  name="description"
+                  required
+                  defaultValue={editingBill.description}
+                />
+              </div>
+              <div className="form-group">
+                <label>Valor Previsto (R$)</label>
+                <input
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  required
+                  defaultValue={editingBill.amount}
+                />
+              </div>
+              <div className="form-group">
+                <label>Dia do Vencimento (1 a 31)</label>
+                <input
+                  name="dueDay"
+                  type="number"
+                  min={1}
+                  max={31}
+                  required
+                  defaultValue={editingBill.dueDay}
+                />
+              </div>
+              <div className="form-group">
+                <label>Categoria Correspondente</label>
+                <select
+                  name="categoryId"
+                  defaultValue={editingBill.categoryId}
+                  required
+                >
+                  {activeCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>
+                💾 Salvar Alterações
               </button>
             </form>
           </div>

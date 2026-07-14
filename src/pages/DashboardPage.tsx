@@ -60,20 +60,21 @@ export function DashboardPage() {
   // Next Month Forecast Calculations
   const forecast = useMemo(() => {
     const nextMonthStr = shiftMonth(month, 1);
+    const currentBankBalance = state.accounts.reduce((sum, a) => sum + a.balance, 0);
     const fixedIncomesTotal = (state.recurringBills || []).filter((b) => b.type === "income").reduce((sum, b) => sum + b.amount, 0);
-    const expectedIncome = (totals.income || 0) + fixedIncomesTotal || 8000; // fallback if no current income
     const fixedBillsTotal = (state.recurringBills || []).filter((b) => (b.type || "expense") === "expense").reduce((sum, b) => sum + b.amount, 0);
     const cardInvoicesTotal = state.cards.reduce((sum, c) => sum + cardSpent(state, c.id, nextMonthStr), 0);
-    const expectedBalance = expectedIncome - fixedBillsTotal - cardInvoicesTotal;
+    const expectedExpenses = fixedBillsTotal + cardInvoicesTotal;
+    const expectedBalance = currentBankBalance + fixedIncomesTotal - expectedExpenses;
     
     return {
       nextMonthStr,
-      expectedIncome,
-      fixedBillsTotal,
-      cardInvoicesTotal,
+      currentBankBalance,
+      fixedIncomesTotal,
+      expectedExpenses,
       expectedBalance,
     };
-  }, [state, month, totals.income]);
+  }, [state, month]);
 
   return (
     <>
@@ -313,19 +314,19 @@ export function DashboardPage() {
           
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20, marginTop: 12 }}>
             <div>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>Receitas Previstas:</span>
-              <h4 style={{ fontSize: "1.2rem", color: "var(--green)" }}>{money(forecast.expectedIncome)}</h4>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>Saldo das Contas Atual:</span>
+              <h4 style={{ fontSize: "1.2rem", color: "var(--ink)" }}>{money(forecast.currentBankBalance)}</h4>
             </div>
             <div>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>Boletos Fixos Previstos:</span>
-              <h4 style={{ fontSize: "1.2rem", color: "var(--red)" }}>-{money(forecast.fixedBillsTotal)}</h4>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>Receitas Fixas Previstas (+):</span>
+              <h4 style={{ fontSize: "1.2rem", color: "var(--green)" }}>{money(forecast.fixedIncomesTotal)}</h4>
             </div>
             <div>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>Faturas Previstas (Cartões):</span>
-              <h4 style={{ fontSize: "1.2rem", color: "var(--violet)" }}>-{money(forecast.cardInvoicesTotal)}</h4>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>Despesas Fixas e Cartões (-):</span>
+              <h4 style={{ fontSize: "1.2rem", color: "var(--red)" }}>-{money(forecast.expectedExpenses)}</h4>
             </div>
             <div style={{ background: "var(--surface-2)", padding: 12, borderRadius: "var(--radius-sm)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <span className="muted" style={{ fontSize: "0.75rem" }}>Saldo Líquido Projetado:</span>
+              <span className="muted" style={{ fontSize: "0.75rem" }}>Saldo Final Projetado:</span>
               <strong style={{ fontSize: "1.3rem", color: forecast.expectedBalance < 0 ? "var(--red)" : "var(--green)" }}>
                 {money(forecast.expectedBalance)}
               </strong>
