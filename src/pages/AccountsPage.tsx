@@ -79,7 +79,7 @@ export function AccountsPage() {
           <p className="muted">Gerencie suas contas correntes, poupanças e saldos consolidados.</p>
         </div>
         <button type="button" className="primary-action" onClick={() => setShowAddForm((v) => !v)}>
-          + Nova Conta
+          ➕ Nova Conta
         </button>
       </section>
 
@@ -127,8 +127,8 @@ export function AccountsPage() {
               <input type="color" name="color" defaultValue="#176b5b" style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
             </label>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
-              <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>Cancelar</button>
-              <button type="submit" className="primary-action">Adicionar Conta</button>
+              <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>❌ Cancelar</button>
+              <button type="submit" className="primary-action">💾 Adicionar Conta</button>
             </div>
           </form>
         </section>
@@ -163,7 +163,7 @@ export function AccountsPage() {
                 <label>Cor de Destaque</label>
                 <input type="color" name="color" defaultValue={editingAcc.color || "#176b5b"} style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
               </div>
-              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>Salvar Alterações</button>
+              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>💾 Salvar Alterações</button>
             </form>
           </div>
         </div>

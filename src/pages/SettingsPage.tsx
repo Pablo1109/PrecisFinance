@@ -169,7 +169,7 @@ export function SettingsPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h3 style={{ margin: 0 }}>Gerenciar Categorias</h3>
                 <button type="button" className="primary-action" onClick={() => setShowAddForm(true)}>
-                  + Nova Categoria
+                  ➕ Nova Categoria
                 </button>
               </div>
 
@@ -211,8 +211,8 @@ export function SettingsPage() {
                       <input type="color" name="color" defaultValue="#6366f1" style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
                     </label>
                     <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
-                      <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>Cancelar</button>
-                      <button type="submit" className="primary-action">Adicionar Categoria</button>
+                      <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>❌ Cancelar</button>
+                      <button type="submit" className="primary-action">💾 Adicionar Categoria</button>
                     </div>
                   </form>
                 </section>
@@ -234,7 +234,7 @@ export function SettingsPage() {
                         <label>Cor de Identificação</label>
                         <input type="color" name="color" defaultValue={editingCat.color || "#6366f1"} style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
                       </div>
-                      <button type="submit" className="primary-action" style={{ marginTop: 12 }}>Salvar Alterações</button>
+                      <button type="submit" className="primary-action" style={{ marginTop: 12 }}>💾 Salvar Alterações</button>
                     </form>
                   </div>
                 </div>
@@ -323,7 +323,7 @@ export function SettingsPage() {
                   <p className="muted" style={{ fontSize: "0.85rem", margin: "4px 0 0 0" }}>Exclui permanentemente todos os lançamentos manuais, contas fixas, contas bancárias e cartões.</p>
                 </div>
                 <button type="button" className="primary-action" style={{ background: "var(--red)", borderColor: "var(--red)" }} onClick={handleResetData}>
-                  Reiniciar Dados
+                  ⚠️ Reiniciar Dados
                 </button>
               </div>
             </div>

@@ -6,6 +6,7 @@ import { FinanceStateRepository } from "@/repositories/FinanceStateRepository";
 import { useAuth } from "./AuthContext";
 import { uid } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
+import { syncAll } from "@/pluggy";
 
 interface FinanceCtx {
   state: FinanceState | null;
@@ -282,6 +283,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
       if (configured) {
         loaded = await mergeDatabaseIntoState(loaded, user.id);
+        syncAll(supabase).catch((e) => console.warn("Background Open Finance sync skipped/failed", e));
       }
 
       if (!cancelled) {

@@ -135,14 +135,14 @@ export function OpenFinancePage() {
         <p className="muted">Conecte bancos pelo Pluggy. Os dados passam pelo motor de tratamento antes de aparecer nas telas de correção e cartões OF.</p>
       </section>
       <section className="actions-row">
-        <button type="button" className="primary-action" disabled={busy} onClick={connect}>+ Conectar banco</button>
-        <button type="button" className="secondary-action" disabled={busy} onClick={syncEverything}>↻ Sincronizar tudo</button>
+        <button type="button" className="primary-action" disabled={busy} onClick={connect}>➕ Conectar Banco</button>
+        <button type="button" className="secondary-action" disabled={busy} onClick={syncEverything}>🔄 Sincronizar Tudo</button>
         <button type="button" className="secondary-action" disabled={busy} onClick={handleDisconnectAll} style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.2)", background: "rgba(239, 68, 68, 0.05)" }}>
           🗑️ Limpar Open Finance
         </button>
-        <Link to="/correcao/open-finance" className="secondary-action">Correção OF</Link>
-        <Link to="/cartoes" className="secondary-action">Cartões</Link>
-        <Link to="/extrato" className="secondary-action">Extrato unificado</Link>
+        <Link to="/correcao/open-finance" className="secondary-action">🛠️ Correção OF</Link>
+        <Link to="/cartoes" className="secondary-action">💳 Cartões</Link>
+        <Link to="/extrato" className="secondary-action">📋 Extrato Unificado</Link>
       </section>
 
       {isLoading ? <p>Carregando…</p> : (
@@ -170,7 +170,7 @@ export function OpenFinancePage() {
                           .catch((e) => toast("Erro: " + String(e.message || e)))
                       }
                     >
-                      Sync
+                      🔄 Sincronizar
                     </button>
                     <button
                       type="button"
@@ -179,7 +179,7 @@ export function OpenFinancePage() {
                       disabled={busy}
                       onClick={() => handleDeleteItem(it.item_id)}
                     >
-                      Excluir
+                      🗑️ Excluir
                     </button>
                   </div>
                 </li>

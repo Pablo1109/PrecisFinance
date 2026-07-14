@@ -131,19 +131,9 @@ export function suggestCategory(state: FinanceState, text: string, type: "income
   return cat ? { categoryId: cat.id, subcategory: cat.subcategories[0] || "" } : null;
 }
 
-export function applyTransactionImpact(state: FinanceState, tx: Transaction, direction: 1 | -1) {
-  if (tx.source === "pluggy") return;
-  if (tx.date > new Date().toISOString().slice(0, 10)) return;
-  const account = state.accounts.find((a) => a.id === tx.accountId);
-  if (tx.type === "income" && account) account.balance += tx.amount * direction;
-  if (tx.type === "expense" && account && !tx.cardId) account.balance -= tx.amount * direction;
-  if (tx.type === "transfer" && account && !tx.cardId) {
-    account.balance -= tx.amount * direction;
-    if (tx.destAccountId) {
-      const dest = state.accounts.find((a) => a.id === tx.destAccountId);
-      if (dest) dest.balance += (tx.destAmount || tx.amount) * direction;
-    }
-  }
+export function applyTransactionImpact(_state: FinanceState, _tx: Transaction, _direction: 1 | -1) {
+  // Checking account balances are strictly updated from Open Finance to prevent discrepancies.
+  // Manual transactions in the app are stored in the ledger but do not directly modify bank account balances.
 }
 
 export function lastMonths(from: string, count: number): string[] {
