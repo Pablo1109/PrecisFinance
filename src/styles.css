@@ -1706,4 +1706,20 @@ body.dark-mode .review-alert-banner {
   border-color: var(--violet) !important;
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15) !important;
   outline: none;
+}
+
+/* Smooth Page Transitions */
+.page-enter {
+  animation: pageEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

@@ -15,6 +15,7 @@ export function EntriesPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["entries"],
     queryFn: () => EntryService.list({ limit: 200 }),
+    staleTime: 60 * 1000,
   });
 
   if (isLoading) return <p>Carregando lançamentos…</p>;

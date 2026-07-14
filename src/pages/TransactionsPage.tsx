@@ -71,21 +71,27 @@ export function TransactionsPage() {
       {/* Metrics Row */}
       <section className="metric-grid" style={{ marginTop: 16 }}>
         <article className="metric-card income">
-          <div className="metric-icon-wrap">📈</div>
+          <div className="metric-icon-wrap" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "rgba(16, 185, 129, 0.1)", borderRadius: "50%" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--green)" }}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </div>
           <div>
             <span>Receitas do Mês</span>
             <h3>{money(totals.income)}</h3>
           </div>
         </article>
         <article className="metric-card expense">
-          <div className="metric-icon-wrap">📉</div>
+          <div className="metric-icon-wrap" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "rgba(239, 68, 68, 0.1)", borderRadius: "50%" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--red)" }}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          </div>
           <div>
             <span>Despesas do Mês</span>
             <h3>{money(totals.expense)}</h3>
           </div>
         </article>
         <article className={`metric-card balance ${totals.balance >= 0 ? "positive" : "negative"}`}>
-          <div className="metric-icon-wrap">⚖️</div>
+          <div className="metric-icon-wrap" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "var(--brand-soft)", borderRadius: "50%" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--brand)" }}><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          </div>
           <div>
             <span>Saldo Líquido</span>
             <h3 style={{ color: totals.balance >= 0 ? "var(--green)" : "var(--red)" }}>{money(totals.balance)}</h3>

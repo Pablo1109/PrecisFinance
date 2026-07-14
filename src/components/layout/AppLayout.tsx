@@ -293,7 +293,7 @@ export function AppLayout() {
            </div>
          )}
 
-         <section className="content"><Outlet /></section>
+          <section className="content page-enter" key={location.pathname}><Outlet /></section>
 
          {showReviewModal && pendingReview.length > 0 && (
            <ReviewQueueModal
