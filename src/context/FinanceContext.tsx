@@ -178,7 +178,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
       if (error) throw error;
       if (data?.state) {
-        setSpouseState(normalizeState(data.state));
+        const baseSpouseState = normalizeState(data.state);
+        // Load spouse manual transactions and recurring bills from database
+        const mergedSpouseState = await mergeDatabaseIntoState(baseSpouseState, spouseId);
+        setSpouseState(mergedSpouseState);
       } else {
         setSpouseState(null);
       }

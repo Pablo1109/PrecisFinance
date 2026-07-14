@@ -244,11 +244,11 @@ export function DashboardPage() {
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <span className="muted" style={{ fontSize: "0.7rem", opacity: 0.8, display: "block" }}>Saldo Devedor</span>
+                      <span style={{ fontSize: "0.7rem", opacity: 0.8, display: "block", color: "rgba(255, 255, 255, 0.7)" }}>Saldo Devedor</span>
                       <strong style={{ fontSize: "1.1rem" }}>{money(outstanding)}</strong>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <span className="muted" style={{ fontSize: "0.7rem", opacity: 0.8, display: "block" }}>Limite total</span>
+                      <span style={{ fontSize: "0.7rem", opacity: 0.8, display: "block", color: "rgba(255, 255, 255, 0.7)" }}>Limite total</span>
                       <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{money(c.limit)}</span>
                     </div>
                   </div>

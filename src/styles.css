@@ -1530,6 +1530,12 @@ body.dark-mode {
   --muted-2: #71717a;
   --line: #27272a;
   --line-strong: #3f3f46;
+
+  /* Brand Overrides for Dark Mode */
+  --brand: #f4f4f5;
+  --brand-strong: #ffffff;
+  --brand-soft: #27272a;
+  --brand-gradient: linear-gradient(135deg, #ffffff 0%, #a1a1aa 50%, #71717a 100%);
 }
 
 body.dark-mode .amount-group {

@@ -250,7 +250,7 @@ export function AppLayout() {
                     fontWeight: 700,
                     cursor: "pointer",
                     background: !isFamilyMode ? "var(--brand)" : "transparent",
-                    color: !isFamilyMode ? "#fff" : "var(--ink)",
+                    color: !isFamilyMode ? "var(--surface)" : "var(--ink)",
                   }}
                   onClick={() => setIsFamilyMode(false)}
                 >
@@ -266,7 +266,7 @@ export function AppLayout() {
                     fontWeight: 700,
                     cursor: "pointer",
                     background: isFamilyMode ? "var(--brand)" : "transparent",
-                    color: isFamilyMode ? "#fff" : "var(--ink)",
+                    color: isFamilyMode ? "var(--surface)" : "var(--ink)",
                   }}
                   onClick={() => setIsFamilyMode(true)}
                 >
