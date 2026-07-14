@@ -254,7 +254,7 @@ export function AppLayout() {
                   }}
                   onClick={() => setIsFamilyMode(false)}
                 >
-                  👤 Pessoal
+                  Pessoal
                 </button>
                 <button
                   type="button"
@@ -270,7 +270,7 @@ export function AppLayout() {
                   }}
                   onClick={() => setIsFamilyMode(true)}
                 >
-                  👨‍👩‍👧‍👦 Família
+                  Família
                 </button>
               </div>
             )}
@@ -291,11 +291,17 @@ export function AppLayout() {
                className="icon-button"
                onClick={() => setIsDarkMode(!isDarkMode)}
                title={isDarkMode ? "Modo Claro" : "Modo Escuro"}
-               style={{ fontSize: "1.2rem", background: "none", border: "none", cursor: "pointer", marginRight: 8 }}
+               style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", marginRight: 8, padding: 6, color: "var(--ink)" }}
              >
-               {isDarkMode ? "☀️" : "🌙"}
+               {isDarkMode ? (
+                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+               ) : (
+                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6.36 6.36 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+               )}
              </button>
-             <Link to="/login" className="icon-button" title="Conta" style={{ marginRight: 8 }}>🔐</Link>
+             <Link to="/login" className="icon-button" title="Conta" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginRight: 8, padding: 6, color: "var(--ink)" }}>
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+             </Link>
              <button
                type="button"
                className="primary-action"
@@ -308,7 +314,7 @@ export function AppLayout() {
 
         {pendingReview.length > 0 && (
            <div className="alert info review-alert-banner" style={{ margin: "0 24px 16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-             <span>💡 Você tem <strong>{pendingReview.length}</strong> novos lançamentos importados do Open Finance aguardando sua revisão!</span>
+              <span>Você tem <strong>{pendingReview.length}</strong> novos lançamentos importados do Open Finance aguardando sua revisão!</span>
              <button type="button" className="primary-action small" onClick={() => setShowReviewModal(true)} style={{ padding: "6px 12px", fontSize: "0.85rem" }}>
                Revisar Agora
              </button>

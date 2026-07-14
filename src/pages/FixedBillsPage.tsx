@@ -180,7 +180,7 @@ export function FixedBillsPage() {
             setShowAdd(false);
           }}
         >
-          💸 Contas Fixas (Despesas)
+          Contas Fixas (Despesas)
         </button>
         <button
           type="button"
@@ -197,35 +197,43 @@ export function FixedBillsPage() {
             setShowAdd(false);
           }}
         >
-          💰 Receitas Fixas (Ganhos)
+          Receitas Fixas (Ganhos)
         </button>
       </div>
 
       {/* Forecast widget with Account Cash Balance incorporated */}
       <section className="metric-grid" style={{ marginTop: 16 }}>
         <article className="metric-card patrimony">
-          <div className="metric-icon-wrap">💼</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
           <div>
             <span>Saldo Atual das Contas</span>
             <h3>{money(projection.currentBankBalance)}</h3>
           </div>
         </article>
         <article className="metric-card income">
-          <div className="metric-icon-wrap">📈</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+          </div>
           <div>
             <span>Projeção de Receitas ({projection.nextMonth})</span>
             <h3>+{money(projection.recurringIncomes)}</h3>
           </div>
         </article>
         <article className="metric-card expense">
-          <div className="metric-icon-wrap">📉</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><polyline points="17 7 17 17 7 17"/></svg>
+          </div>
           <div>
             <span>Projeção de Despesas ({projection.nextMonth})</span>
             <h3>-{money(projection.expectedExpense)}</h3>
           </div>
         </article>
         <article className={`metric-card balance ${projection.netForecast >= 0 ? "positive" : "negative"}`}>
-          <div className="metric-icon-wrap">⚖️</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M5 7h14"/><path d="M9 21h6"/><path d="M5 7L3 13h4L5 7z"/><path d="M19 7L17 13h4l-2-7z"/></svg>
+          </div>
           <div>
             <span>Saldo Final Projetado ({projection.nextMonth})</span>
             <h3 style={{ color: projection.netForecast >= 0 ? "var(--green)" : "var(--red)" }}>
@@ -286,7 +294,7 @@ export function FixedBillsPage() {
                             style={{ fontSize: "0.8rem", padding: "4px 8px" }}
                             onClick={() => setEditingBill(b)}
                           >
-                            ✏️ Editar
+                            Editar
                           </button>
                           <button
                             type="button"
@@ -294,7 +302,7 @@ export function FixedBillsPage() {
                             style={{ color: "var(--red)", fontSize: "0.8rem", padding: "4px 8px" }}
                             onClick={() => handleDelete(b.id)}
                           >
-                            🗑️ Excluir
+                            Excluir
                           </button>
                         </div>
                       </td>
@@ -363,7 +371,7 @@ export function FixedBillsPage() {
                 </select>
               </div>
               <button type="submit" className="primary-action" disabled={busy} style={{ marginTop: 12 }}>
-                💾 Salvar Recorrência
+                Salvar Recorrência
               </button>
             </form>
           </div>
@@ -375,7 +383,7 @@ export function FixedBillsPage() {
         <div className="quick-insert-backdrop" onClick={() => setEditingBill(null)}>
           <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
             <div className="quick-insert-header">
-              <h2>✏️ Editar Lançamento Fixo</h2>
+              <h2>Editar Lançamento Fixo</h2>
               <button type="button" className="close-btn" onClick={() => setEditingBill(null)}>×</button>
             </div>
             <form onSubmit={handleEditSubmit} className="quick-insert-form">
@@ -423,7 +431,7 @@ export function FixedBillsPage() {
                 </select>
               </div>
               <button type="submit" className="primary-action" style={{ marginTop: 12 }}>
-                💾 Salvar Alterações
+                Salvar Alterações
               </button>
             </form>
           </div>

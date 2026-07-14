@@ -142,7 +142,7 @@ export function SettingsPage() {
             }}
             onClick={() => setActiveSettingsTab("categories")}
           >
-            🏷️ Categorias
+            Categorias
           </button>
           <button
             type="button"
@@ -159,7 +159,7 @@ export function SettingsPage() {
             }}
             onClick={() => setActiveSettingsTab("preferences")}
           >
-            ⚙️ Preferências Gerais
+            Preferências Gerais
           </button>
           <button
             type="button"
@@ -176,7 +176,7 @@ export function SettingsPage() {
             }}
             onClick={() => setActiveSettingsTab("family")}
           >
-            👨‍👩‍👧‍👦 Conta Conjunta
+            Conta Conjunta
           </button>
           <button
             type="button"
@@ -193,7 +193,7 @@ export function SettingsPage() {
             }}
             onClick={() => setActiveSettingsTab("danger-zone")}
           >
-            ⚠️ Zona de Perigo
+            Zona de Perigo
           </button>
         </aside>
 
@@ -206,7 +206,7 @@ export function SettingsPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h3 style={{ margin: 0 }}>Gerenciar Categorias</h3>
                 <button type="button" className="primary-action" onClick={() => setShowAddForm(true)}>
-                  ➕ Nova Categoria
+                  Nova Categoria
                 </button>
               </div>
 
@@ -351,7 +351,7 @@ export function SettingsPage() {
           {/* TAB 3: DANGER ZONE */}
           {activeSettingsTab === "family" && (
             <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <h3 style={{ margin: 0 }}>👨‍👩‍👧‍👦 Conta Conjunta & Compartilhamento</h3>
+              <h3 style={{ margin: 0 }}>Conta Conjunta & Compartilhamento</h3>
               <p className="muted" style={{ margin: 0 }}>
                 Conecte a sua conta com a do seu cônjuge para ver os saldos, faturas e lançamentos consolidados no Modo Família.
               </p>
@@ -373,7 +373,7 @@ export function SettingsPage() {
                       alert("ID copiado para a área de transferência!");
                     }}
                   >
-                    📋 Copiar ID
+                    Copiar ID
                   </button>
                 </div>
                 <small className="muted" style={{ display: "block", marginTop: 4 }}>
@@ -392,12 +392,12 @@ export function SettingsPage() {
                     style={{ flex: 1, padding: "8px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", color: "var(--ink)" }}
                   />
                   <button type="submit" className="primary-action">
-                    💾 Salvar Vínculo
+                    Salvar Vínculo
                   </button>
                 </div>
                 {rawState?.settings.spouseId && (
                   <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, color: "var(--green)" }}>
-                    <span>✅ Vinculado ao ID: <code>{rawState.settings.spouseId}</code></span>
+                    <span>Vinculado ao ID: <code>{rawState.settings.spouseId}</code></span>
                     <button
                       type="button"
                       className="ghost-action"

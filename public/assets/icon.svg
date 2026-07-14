@@ -1,33 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Precis Finance - Corinthians Edition">
-  <!-- Circular Badge -->
-  <circle cx="64" cy="64" r="60" fill="#09090b" stroke="#ffffff" stroke-width="4"/>
-  <circle cx="64" cy="64" r="52" fill="#18181b" stroke="#3f3f46" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Precis Finance - Titanium Edition">
+  <defs>
+    <linearGradient id="titanium" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#27272a"/>
+      <stop offset="50%" stop-color="#52525b"/>
+      <stop offset="100%" stop-color="#a1a1aa"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#18181b"/>
+    </linearGradient>
+  </defs>
 
-  <!-- Crossed Oars (Corinthians Red: #E30613) -->
-  <g stroke="#E30613" stroke-width="5" stroke-linecap="round" fill="none">
-    <!-- Left Oar Handle & Blade -->
-    <line x1="28" y1="100" x2="100" y2="28" />
-    <path d="M 96 24 L 104 32 L 108 28 L 100 20 Z" fill="#E30613" stroke="none" />
-    <!-- Right Oar Handle & Blade -->
-    <line x1="100" y1="100" x2="28" y2="28" />
-    <path d="M 32 24 L 24 32 L 20 28 L 28 20 Z" fill="#E30613" stroke="none" />
+  <!-- Premium Smooth Rounded Box -->
+  <rect width="128" height="128" rx="36" fill="url(#bgGrad)" stroke="#27272a" stroke-width="1"/>
+
+  <!-- Minimalist Geometric Finance Helix (Abstract P / Infinity Flow) -->
+  <g transform="translate(16, 16)">
+    <!-- Back Loop -->
+    <path d="M 48 24 C 28 24, 20 40, 20 48 C 20 56, 28 72, 48 72 C 68 72, 76 56, 76 48 C 76 40, 68 24, 48 24 Z" fill="none" stroke="url(#titanium)" stroke-width="8" stroke-linecap="round" opacity="0.3"/>
+    <!-- Front Flow (Growth Trend + Flow Loop) -->
+    <path d="M 24 64 L 44 44 L 56 52 L 76 28" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="76" cy="28" r="6" fill="#a1a1aa"/>
   </g>
-
-  <!-- Corinthians Style Anchor (White & Gold) -->
-  <g fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Ring at top -->
-    <circle cx="64" cy="40" r="8" stroke="#D4AF37" stroke-width="3" />
-    <!-- Main shaft -->
-    <line x1="64" y1="48" x2="64" y2="92" stroke="#ffffff" stroke-width="5" />
-    <!-- Crossbar -->
-    <line x1="48" y1="58" x2="80" y2="58" stroke="#ffffff" stroke-width="4" />
-    <!-- Curved flukes at bottom -->
-    <path d="M 38 76 C 44 94, 84 94, 90 76" stroke="#ffffff" stroke-width="5" />
-    <path d="M 38 76 L 34 82 L 42 80 Z" fill="#ffffff" stroke="none" />
-    <path d="M 90 76 L 94 82 L 86 80 Z" fill="#ffffff" stroke="none" />
-  </g>
-
-  <!-- Financial Trend Line (Gold #D4AF37 overlay) -->
-  <path d="M 30 84 L 52 62 L 72 74 L 98 44" fill="none" stroke="#D4AF37" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="98" cy="44" r="5" fill="#ffffff" />
 </svg>

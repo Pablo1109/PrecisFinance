@@ -95,28 +95,36 @@ export function DashboardPage() {
       {/* Metrics Row */}
       <section className="metric-grid">
         <article className="metric-card patrimony">
-          <div className="metric-icon-wrap">💼</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
           <div>
             <span>Patrimônio</span>
             <strong>{money(totalPatrimony(state))}</strong>
           </div>
         </article>
         <article className="metric-card income">
-          <div className="metric-icon-wrap">📈</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+          </div>
           <div>
             <span>Receitas</span>
             <strong>{money(totals.income)}</strong>
           </div>
         </article>
         <article className="metric-card expense">
-          <div className="metric-icon-wrap">📉</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><polyline points="17 7 17 17 7 17"/></svg>
+          </div>
           <div>
             <span>Despesas</span>
             <strong>{money(totals.expense)}</strong>
           </div>
         </article>
         <article className={`metric-card balance ${totals.balance >= 0 ? "positive" : "negative"}`}>
-          <div className="metric-icon-wrap">💳</div>
+          <div className="metric-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          </div>
           <div>
             <span>Saldo mensal</span>
             <strong>{money(totals.balance)}</strong>
@@ -182,7 +190,9 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="chart-empty-state">
-              <div className="empty-chart-icon">📊</div>
+              <div className="empty-chart-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 48, height: 48, background: "var(--surface-2)", borderRadius: "50%", color: "var(--muted)", margin: "0 auto 12px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+              </div>
               <p className="muted">Nenhuma despesa registrada neste mês para gerar o gráfico.</p>
             </div>
           )}
