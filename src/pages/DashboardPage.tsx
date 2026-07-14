@@ -1,6 +1,7 @@
 import { useFinance } from "@/context/FinanceContext";
 import {
   budgetAlerts,
+  billReminderAlerts,
   cardSpent,
   cardPayments,
   getMonthTransactions,
@@ -39,7 +40,12 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
     return getMonthTransactions(state, month).slice(0, 6);
   }, [state, month]);
 
-  const alerts = budgetAlerts(state, month);
+  const alerts = useMemo(() => {
+    return [
+      ...billReminderAlerts(state, month),
+      ...budgetAlerts(state, month)
+    ];
+  }, [state, month]);
 
   // Category Expenses Calculation
   const expensesByCat = useMemo(() => expenseByCategory(state, month), [state, month]);
@@ -90,7 +96,7 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
     <>
       {alerts.length > 0 && (
         <section className="alerts" style={{ marginBottom: 24 }}>
-          {alerts.slice(0, 3).map((a, i) => (
+          {alerts.slice(0, 6).map((a, i) => (
             <article key={i} className={`alert ${a.level}`}>
               <div>
                 <strong>{a.title}</strong>

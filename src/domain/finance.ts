@@ -117,6 +117,86 @@ export function budgetAlerts(state: FinanceState, month: string) {
     .filter(Boolean) as Array<{ percent: number; level: "danger" | "warning"; title: string; message: string }>;
 }
 
+export function billReminderAlerts(state: FinanceState, month: string) {
+  const alerts: Array<{ level: "danger" | "warning"; title: string; message: string }> = [];
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthNum = today.getMonth();
+
+  // 1. Check Fixed Bills (Contas Fixas / Despesas Recorrentes)
+  (state.recurringBills || [])
+    .filter((b) => (b.type || "expense") === "expense")
+    .forEach((b) => {
+      const isPaid = (state.transactions || []).some(
+        (t) => t.categoryId === b.categoryId && t.date.slice(0, 7) === month && !t.ignored
+      );
+
+      if (!isPaid) {
+        const dueDay = b.dueDay || 10;
+        const dueDate = new Date(currentYear, currentMonthNum, dueDay);
+        
+        // Zero out times for date-only comparison
+        dueDate.setHours(0, 0, 0, 0);
+        const todayZero = new Date(today);
+        todayZero.setHours(0, 0, 0, 0);
+
+        const diffTime = dueDate.getTime() - todayZero.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) {
+          alerts.push({
+            level: "danger",
+            title: "Conta Atrasada",
+            message: `A conta "${b.description}" venceu dia ${dueDay}/${currentMonthNum + 1} (Valor: R$ ${b.amount.toFixed(2)})`,
+          });
+        } else if (diffDays <= 5) {
+          const daysText = diffDays === 0 ? "hoje" : diffDays === 1 ? "amanhã" : `em ${diffDays} dias`;
+          alerts.push({
+            level: "warning",
+            title: "Conta Vence em Breve",
+            message: `A conta "${b.description}" vence dia ${dueDay} (${daysText}, Valor: R$ ${b.amount.toFixed(2)})`,
+          });
+        }
+      }
+    });
+
+  // 2. Check Credit Cards Faturas
+  (state.cards || []).forEach((c) => {
+    const spent = cardSpent(state, c.id, month);
+    const payments = cardPayments(state, c.id, month);
+    const outstanding = spent - payments;
+
+    if (outstanding > 0.01) {
+      const dueDay = c.dueDay || 10;
+      const dueDate = new Date(currentYear, currentMonthNum, dueDay);
+
+      dueDate.setHours(0, 0, 0, 0);
+      const todayZero = new Date(today);
+      todayZero.setHours(0, 0, 0, 0);
+
+      const diffTime = dueDate.getTime() - todayZero.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        alerts.push({
+          level: "danger",
+          title: "Fatura Atrasada",
+          message: `A fatura do cartão "${c.name}" venceu dia ${dueDay}/${currentMonthNum + 1} (Valor pendente: R$ ${outstanding.toFixed(2)})`,
+        });
+      } else if (diffDays <= 5) {
+        const daysText = diffDays === 0 ? "hoje" : diffDays === 1 ? "amanhã" : `em ${diffDays} dias`;
+        alerts.push({
+          level: "warning",
+          title: "Fatura Vence em Breve",
+          message: `A fatura do cartão "${c.name}" vence dia ${dueDay} (${daysText}, Valor: R$ ${outstanding.toFixed(2)})`,
+        });
+      }
+    }
+  });
+
+  return alerts;
+}
+
 export function savingsRate(state: FinanceState, month: string): number {
   const t = monthlyTotals(state, month);
   if (!t.income) return 0;
