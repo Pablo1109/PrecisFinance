@@ -1,6 +1,6 @@
 // Service Worker — estratégia network-first para código, cache-first para ícones/imagens.
 // Bump esta versão sempre que quiser forçar update no cliente.
-const CACHE_NAME = "precis-finance-v3";
+const CACHE_NAME = "precis-finance-v4";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/assets/icon.svg"
