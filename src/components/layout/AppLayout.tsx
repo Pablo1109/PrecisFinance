@@ -20,7 +20,7 @@ const NAV = [
 
 export function AppLayout() {
   const { user, loading: authLoading } = useAuth();
-  const { state, rawState, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert } = useFinance();
+  const { state, rawState, spouseState, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert } = useFinance();
   const location = useLocation();
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
@@ -45,11 +45,11 @@ export function AppLayout() {
 
   const navItems = useMemo(() => {
     const items = [...NAV];
-    if (rawState?.settings.spouseId) {
+    if (rawState?.settings.spouseId || spouseState) {
       items.splice(1, 0, { to: "/familia", label: "Visão geral família", icon: "i-dashboard" });
     }
     return items;
-  }, [rawState?.settings.spouseId]);
+  }, [rawState?.settings.spouseId, spouseState]);
 
   // Quick Insert Modal State
   const [type, setType] = useState<TxType>("expense");
@@ -286,7 +286,7 @@ export function AppLayout() {
 
         {pendingReview.length > 0 && (
            <div className="alert info review-alert-banner" style={{ margin: "0 24px 16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Você tem <strong>{pendingReview.length}</strong> novos lançamentos importados do Open Finance aguardando sua revisão!</span>
+              <span>Você tem <strong>{pendingReview.length}</strong> novos lançamentos aguardando sua revisão!</span>
              <button type="button" className="primary-action small" onClick={() => setShowReviewModal(true)} style={{ padding: "6px 12px", fontSize: "0.85rem" }}>
                Revisar Agora
              </button>
