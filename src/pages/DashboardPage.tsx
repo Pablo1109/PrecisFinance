@@ -8,13 +8,22 @@ import {
   totalPatrimony,
   expenseByCategory,
   shiftMonth,
+  mergeStates,
 } from "@/domain/finance";
 import { money, fmtDate } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
 
-export function DashboardPage() {
-  const { state } = useFinance();
+export function DashboardPage({ consolidated = false }: { consolidated?: boolean }) {
+  const { rawState, spouseState } = useFinance();
+
+  const state = useMemo(() => {
+    if (consolidated && rawState && spouseState) {
+      return mergeStates(rawState, spouseState);
+    }
+    return rawState;
+  }, [consolidated, rawState, spouseState]);
+
   if (!state) return null;
 
   const month = state.settings.selectedMonth;

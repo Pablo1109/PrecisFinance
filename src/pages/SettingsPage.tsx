@@ -136,7 +136,7 @@ export function SettingsPage() {
               justifyContent: "flex-start",
               fontWeight: 700,
               background: activeSettingsTab === "categories" ? "var(--brand)" : "transparent",
-              color: activeSettingsTab === "categories" ? "#fff" : "var(--ink)",
+              color: activeSettingsTab === "categories" ? "var(--surface)" : "var(--ink)",
               border: activeSettingsTab === "categories" ? "none" : "1px solid var(--line)",
               borderRadius: "var(--radius-sm)"
             }}
@@ -153,7 +153,7 @@ export function SettingsPage() {
               justifyContent: "flex-start",
               fontWeight: 700,
               background: activeSettingsTab === "preferences" ? "var(--brand)" : "transparent",
-              color: activeSettingsTab === "preferences" ? "#fff" : "var(--ink)",
+              color: activeSettingsTab === "preferences" ? "var(--surface)" : "var(--ink)",
               border: activeSettingsTab === "preferences" ? "none" : "1px solid var(--line)",
               borderRadius: "var(--radius-sm)"
             }}
@@ -170,7 +170,7 @@ export function SettingsPage() {
               justifyContent: "flex-start",
               fontWeight: 700,
               background: activeSettingsTab === "family" ? "var(--brand)" : "transparent",
-              color: activeSettingsTab === "family" ? "#fff" : "var(--ink)",
+              color: activeSettingsTab === "family" ? "var(--surface)" : "var(--ink)",
               border: activeSettingsTab === "family" ? "none" : "1px solid var(--line)",
               borderRadius: "var(--radius-sm)"
             }}
@@ -187,7 +187,7 @@ export function SettingsPage() {
               justifyContent: "flex-start",
               fontWeight: 700,
               background: activeSettingsTab === "danger-zone" ? "var(--red)" : "transparent",
-              color: activeSettingsTab === "danger-zone" ? "#fff" : "var(--ink)",
+              color: activeSettingsTab === "danger-zone" ? "var(--surface)" : "var(--ink)",
               border: activeSettingsTab === "danger-zone" ? "none" : "1px solid var(--line)",
               borderRadius: "var(--radius-sm)"
             }}
@@ -222,7 +222,7 @@ export function SettingsPage() {
                       fontSize: "0.85rem",
                       fontWeight: 600,
                       background: activeCatTab === tab ? "var(--brand)" : "transparent",
-                      color: activeCatTab === tab ? "#fff" : "var(--ink)",
+                      color: activeCatTab === tab ? "var(--surface)" : "var(--ink)",
                       border: activeCatTab === tab ? "none" : "1px solid var(--line)"
                     }}
                     onClick={() => {

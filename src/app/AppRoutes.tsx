@@ -25,6 +25,7 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="familia" element={<DashboardPage consolidated={true} />} />
           <Route path="lancamentos" element={<TransactionsPage />} />
           <Route path="extrato" element={<EntriesPage />} />
           <Route path="contas" element={<AccountsPage />} />

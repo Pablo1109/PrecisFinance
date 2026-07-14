@@ -172,7 +172,7 @@ export function FixedBillsPage() {
             padding: "8px 16px",
             fontWeight: 700,
             background: activeTab === "expense" ? "var(--brand)" : "transparent",
-            color: activeTab === "expense" ? "#fff" : "var(--ink)",
+            color: activeTab === "expense" ? "var(--surface)" : "var(--ink)",
             border: activeTab === "expense" ? "none" : "1px solid var(--line)"
           }}
           onClick={() => {
@@ -189,7 +189,7 @@ export function FixedBillsPage() {
             padding: "8px 16px",
             fontWeight: 700,
             background: activeTab === "income" ? "var(--brand)" : "transparent",
-            color: activeTab === "income" ? "#fff" : "var(--ink)",
+            color: activeTab === "income" ? "var(--surface)" : "var(--ink)",
             border: activeTab === "income" ? "none" : "1px solid var(--line)"
           }}
           onClick={() => {

@@ -20,7 +20,7 @@ const NAV = [
 
 export function AppLayout() {
   const { user, loading: authLoading } = useAuth();
-  const { state, rawState, isFamilyMode, setIsFamilyMode, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert } = useFinance();
+  const { state, rawState, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert } = useFinance();
   const location = useLocation();
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
@@ -42,6 +42,14 @@ export function AppLayout() {
     if (!state) return [];
     return state.transactions.filter((t) => t.reviewed === false);
   }, [state]);
+
+  const navItems = useMemo(() => {
+    const items = [...NAV];
+    if (rawState?.settings.spouseId) {
+      items.splice(1, 0, { to: "/familia", label: "Visão geral família", icon: "i-dashboard" });
+    }
+    return items;
+  }, [rawState?.settings.spouseId]);
 
   // Quick Insert Modal State
   const [type, setType] = useState<TxType>("expense");
@@ -193,7 +201,7 @@ export function AppLayout() {
         </Link>
 
         <nav className="main-nav">
-          {NAV.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -238,42 +246,6 @@ export function AppLayout() {
             <h1 id="viewTitle">Precis Finance</h1>
           </div>
           <div className="topbar-actions">
-            {rawState?.settings.spouseId && (
-              <div style={{ display: "flex", gap: 4, background: "var(--surface-2)", padding: 4, borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", marginRight: 12 }}>
-                <button
-                  type="button"
-                  style={{
-                    border: "none",
-                    padding: "6px 12px",
-                    borderRadius: "var(--radius-xs)",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    background: !isFamilyMode ? "var(--brand)" : "transparent",
-                    color: !isFamilyMode ? "var(--surface)" : "var(--ink)",
-                  }}
-                  onClick={() => setIsFamilyMode(false)}
-                >
-                  Pessoal
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    border: "none",
-                    padding: "6px 12px",
-                    borderRadius: "var(--radius-xs)",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    background: isFamilyMode ? "var(--brand)" : "transparent",
-                    color: isFamilyMode ? "var(--surface)" : "var(--ink)",
-                  }}
-                  onClick={() => setIsFamilyMode(true)}
-                >
-                  Família
-                </button>
-              </div>
-            )}
             <label className="select-label">
               <span>Mês</span>
               <select

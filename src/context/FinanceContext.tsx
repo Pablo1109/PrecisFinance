@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { FinanceState, SyncStatus, Transaction, Investment, TxType, RecurringBill } from "@/domain/types";
 import { createDemoState, createEmptyState, normalizeState } from "@/domain/seed";
-import { applyTransactionImpact, mergeStates } from "@/domain/finance";
+import { applyTransactionImpact } from "@/domain/finance";
 import { FinanceStateRepository } from "@/repositories/FinanceStateRepository";
 import { useAuth } from "./AuthContext";
 import { uid } from "@/lib/format";
@@ -123,12 +123,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("is_family_mode", String(isFamilyMode));
   }, [isFamilyMode]);
 
-  const state = useMemo(() => {
-    if (isFamilyMode && spouseState && rawState) {
-      return mergeStates(rawState, spouseState);
-    }
-    return rawState;
-  }, [isFamilyMode, spouseState, rawState]);
+  const state = rawState;
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("desconectado");
   const [ready, setReady] = useState(false);
