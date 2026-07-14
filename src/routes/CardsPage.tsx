@@ -1,15 +1,16 @@
 import { FormEvent, useState, useMemo } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money, uid, fmtDate } from "@/lib/format";
-import { cardSpent, getTransactionInvoiceMonth } from "@/domain/finance";
+import { cardSpent, getTransactionInvoiceMonth, cardPayments } from "@/domain/finance";
 import type { Transaction } from "@/domain/types";
 
 export function CardsPage() {
-  const { state, update } = useFinance();
+  const { state, update, addTransaction } = useFinance();
   const [editingCard, setEditingCard] = useState<any | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewingInvoicesCardId, setViewingInvoicesCardId] = useState<string | null>(null);
   const [expandedInvoiceMonth, setExpandedInvoiceMonth] = useState<string | null>(null);
+  const [payingInvoice, setPayingInvoice] = useState<{ cardId: string; month: string; amount: number } | null>(null);
 
   if (!state) return null;
 
@@ -100,6 +101,36 @@ export function CardsPage() {
     setEditingCard(null);
   }
 
+  function handleRegisterPayment(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!payingInvoice) return;
+    const fd = new FormData(e.currentTarget);
+    const accountId = String(fd.get("accountId") || "");
+    const amountVal = Number(fd.get("amount") || 0);
+    const dateVal = String(fd.get("date") || "");
+
+    const targetCard = cardsList.find(x => x.id === payingInvoice.cardId);
+    if (!targetCard || amountVal <= 0 || !accountId) return;
+
+    addTransaction({
+      type: "transfer",
+      date: dateVal,
+      description: `Pagamento Fatura - ${targetCard.name}`,
+      amount: amountVal,
+      currency: "BRL",
+      accountId,
+      cardId: targetCard.id,
+      categoryId: "",
+      subcategory: "",
+      tags: "",
+      location: "",
+      note: `Pagamento da fatura de ${payingInvoice.month}`,
+      recurring: false,
+    });
+
+    setPayingInvoice(null);
+  }
+
   function handleDelete(id: string) {
     if (!window.confirm("Deseja realmente excluir este cartão manual?")) return;
     update((s) => {
@@ -126,7 +157,7 @@ export function CardsPage() {
           <p className="muted">Cadastre e gerencie faturas, limites e cores dos seus cartões manuais.</p>
         </div>
         <button type="button" className="primary-action" onClick={() => setShowAddForm((v) => !v)}>
-          + Novo Cartão
+          ➕ Novo Cartão
         </button>
       </section>
 
@@ -168,8 +199,8 @@ export function CardsPage() {
               <input type="color" name="color2" defaultValue="#1e1b4b" style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
             </label>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
-              <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>Cancelar</button>
-              <button type="submit" className="primary-action">Adicionar Cartão</button>
+              <button type="button" className="secondary-action" onClick={() => setShowAddForm(false)}>❌ Cancelar</button>
+              <button type="submit" className="primary-action">💾 Adicionar Cartão</button>
             </div>
           </form>
         </section>
@@ -220,7 +251,47 @@ export function CardsPage() {
                   <input type="color" name="color2" defaultValue={(editingCard.color || "#6366f1,#1e1b4b").split(",")[1] || "#1e1b4b"} style={{ width: "100%", height: 38, padding: 2, cursor: "pointer", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)" }} />
                 </div>
               </div>
-              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>Salvar Alterações</button>
+              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>💾 Salvar Alterações</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {payingInvoice && (
+        <div className="quick-insert-backdrop" onClick={() => setPayingInvoice(null)}>
+          <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quick-insert-header">
+              <h2>💳 Pagar Fatura</h2>
+              <button type="button" className="close-btn" onClick={() => setPayingInvoice(null)}>×</button>
+            </div>
+            <form onSubmit={handleRegisterPayment} className="quick-insert-form">
+              <div className="form-group">
+                <label>Cartão</label>
+                <input type="text" disabled value={cardsList.find(x => x.id === payingInvoice.cardId)?.name || ""} />
+              </div>
+              <div className="form-group">
+                <label>Fatura Referente</label>
+                <input type="text" disabled value={getMonthLabel(payingInvoice.month)} />
+              </div>
+              <div className="form-group">
+                <label>Conta de Origem (Débito)</label>
+                <select name="accountId" required>
+                  {state.accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.name} (Saldo: {money(acc.balance)})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Valor Pago (R$)</label>
+                <input name="amount" type="number" step="0.01" required defaultValue={payingInvoice.amount} />
+              </div>
+              <div className="form-group">
+                <label>Data do Pagamento</label>
+                <input name="date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+              </div>
+              <button type="submit" className="primary-action" style={{ marginTop: 12 }}>
+                Confirmar Pagamento
+              </button>
             </form>
           </div>
         </div>
@@ -231,8 +302,10 @@ export function CardsPage() {
         {cardsList.map((c) => {
           const limit = c.limit || 0;
           const invoice = cardSpent(state, c.id, state.settings.selectedMonth);
-          const available = limit - invoice;
-          const usedPct = limit > 0 ? Math.min((invoice / limit) * 100, 100) : 0;
+          const payments = cardPayments(state, c.id, state.settings.selectedMonth);
+          const outstandingInvoice = Math.max(0, invoice - payments);
+          const available = limit - outstandingInvoice;
+          const usedPct = limit > 0 ? Math.min((outstandingInvoice / limit) * 100, 100) : 0;
           
           // Split gradient colors
           const c1 = (c.color || "#6366f1").split(",")[0];
@@ -252,8 +325,8 @@ export function CardsPage() {
                   
                   <div className="card-details-row" style={{ marginTop: 8 }}>
                     <div className="card-out-balance" style={{ display: "flex", flexDirection: "column" }}>
-                      <span className="card-label" style={{ fontSize: "0.75rem", opacity: 0.7 }}>Fatura Atual ({state.settings.selectedMonth})</span>
-                      <span className="card-value" style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "Sora, sans-serif" }}>{money(invoice)}</span>
+                      <span className="card-label" style={{ fontSize: "0.75rem", opacity: 0.7 }}>Saldo Devedor Fatura ({state.settings.selectedMonth})</span>
+                      <span className="card-value" style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "Sora, sans-serif" }}>{money(outstandingInvoice)}</span>
                     </div>
                   </div>
 
@@ -299,13 +372,16 @@ export function CardsPage() {
                   {cardInvoices.length === 0 ? (
                     <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>Nenhum lançamento registrado neste cartão.</p>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {cardInvoices.map((inv) => {
                         const isExpanded = expandedInvoiceMonth === inv.month;
-                        const isCurrent = inv.month === state.settings.selectedMonth;
-                        
+                        // Payment Status Math
+                        const paid = cardPayments(state, c.id, inv.month);
+                        const outstanding = Math.max(0, inv.total - paid);
+                        const isPaid = outstanding === 0;
+
                         return (
-                          <div key={inv.month} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 8 }}>
+                          <div key={inv.month} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 10 }}>
                             <div 
                               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
                               onClick={() => setExpandedInvoiceMonth(isExpanded ? null : inv.month)}
@@ -314,11 +390,33 @@ export function CardsPage() {
                                 <span style={{ fontSize: "0.9rem", fontWeight: 700, textTransform: "capitalize", color: "var(--ink)" }}>
                                   {getMonthLabel(inv.month)}
                                 </span>
-                                {isCurrent && <span className="pill success" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>Fatura Atual</span>}
-                                {inv.month > state.settings.selectedMonth && <span className="pill info" style={{ fontSize: "0.65rem", padding: "2px 6px", background: "rgba(99,102,241,0.1)", color: "var(--violet)" }}>Fatura Futura</span>}
+                                {isPaid ? (
+                                  <span className="pill success" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>Paga</span>
+                                ) : paid > 0 ? (
+                                  <span className="pill warning" style={{ fontSize: "0.65rem", padding: "2px 6px", background: "rgba(245,158,11,0.1)", color: "var(--orange)" }}>Parcial ({money(paid)} pago)</span>
+                                ) : (
+                                  <span className="pill danger" style={{ fontSize: "0.65rem", padding: "2px 6px" }}>Pendente</span>
+                                )}
                               </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontWeight: 800, color: "var(--ink)", fontSize: "0.9rem" }}>{money(inv.total)}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                <span style={{ fontWeight: 800, color: "var(--ink)", fontSize: "0.9rem" }}>
+                                  {money(outstanding)} <small className="muted" style={{ fontWeight: "normal", fontSize: "0.75rem" }}>de {money(inv.total)}</small>
+                                </span>
+                                
+                                {/* Pay Button */}
+                                {!isPaid && (
+                                  <button
+                                    type="button"
+                                    className="primary-action"
+                                    style={{ fontSize: "0.75rem", padding: "4px 8px", background: "var(--green)", borderColor: "var(--green)" }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPayingInvoice({ cardId: c.id, month: inv.month, amount: outstanding });
+                                    }}
+                                  >
+                                    💵 Pagar
+                                  </button>
+                                )}
                                 <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{isExpanded ? "▲" : "▼"}</span>
                               </div>
                             </div>

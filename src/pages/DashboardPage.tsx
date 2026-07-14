@@ -2,6 +2,7 @@ import { useFinance } from "@/context/FinanceContext";
 import {
   budgetAlerts,
   cardSpent,
+  cardPayments,
   getMonthTransactions,
   monthlyTotals,
   totalPatrimony,
@@ -219,7 +220,9 @@ export function DashboardPage() {
           <div className="credit-cards-list-widget" style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", maxHeight: 310 }}>
             {state.cards.map((c) => {
               const spent = cardSpent(state, c.id, month);
-              const pct = c.limit ? Math.min(100, (spent / c.limit) * 100) : 0;
+              const payments = cardPayments(state, c.id, month);
+              const outstanding = Math.max(0, spent - payments);
+              const pct = c.limit ? Math.min(100, (outstanding / c.limit) * 100) : 0;
               const c1 = (c.color || "#6366f1").split(",")[0];
               const c2 = (c.color || "#6366f1,#1e1b4b").split(",")[1] || "rgba(0, 0, 0, 0.45)";
               const gradient = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`;
@@ -231,8 +234,8 @@ export function DashboardPage() {
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <span className="muted" style={{ fontSize: "0.7rem", opacity: 0.8, display: "block" }}>Fatura Atual</span>
-                      <strong style={{ fontSize: "1.1rem" }}>{money(spent)}</strong>
+                      <span className="muted" style={{ fontSize: "0.7rem", opacity: 0.8, display: "block" }}>Saldo Devedor</span>
+                      <strong style={{ fontSize: "1.1rem" }}>{money(outstanding)}</strong>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <span className="muted" style={{ fontSize: "0.7rem", opacity: 0.8, display: "block" }}>Limite total</span>
