@@ -130,6 +130,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [showQuickInsert, setShowQuickInsert] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const lastCloud = useRef("");
+  const loadedUserId = useRef<string | null>(null);
 
   const persist = useCallback(
     async (next: FinanceState) => {
@@ -197,7 +198,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const currentId = user?.id ?? null;
+      if (currentId === loadedUserId.current) {
+        return;
+      }
       setReady(false);
+      loadedUserId.current = currentId;
       if (!user) {
         setRawState(createEmptyState());
         setSyncStatus(configured ? "desconectado" : "somente local");
