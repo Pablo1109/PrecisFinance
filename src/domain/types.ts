@@ -5,6 +5,7 @@ export interface FinanceSettings {
   baseCurrency: string;
   rates: Record<string, number>;
   autoCategorization: boolean;
+  spouseId?: string;
 }
 
 export interface Account {

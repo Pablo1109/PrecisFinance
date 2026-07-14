@@ -16,37 +16,17 @@ const NAV = [
   { to: "/cartoes", label: "Cartões", icon: "i-cards" },
   { to: "/investimentos", label: "Investimentos", icon: "i-reports" },
   { to: "/configuracoes", label: "Configurações", icon: "i-security" },
-  { to: "/open-finance", label: "Open Finance", icon: "i-accounts" },
 ];
 
 export function AppLayout() {
   const { user, loading: authLoading } = useAuth();
-  const { state, syncStatus, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert, syncDatabase } = useFinance();
+  const { state, rawState, isFamilyMode, setIsFamilyMode, setSelectedMonth, ready, addTransaction, showQuickInsert, setShowQuickInsert } = useFinance();
   const location = useLocation();
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [isSplit, setIsSplit] = useState(false);
   const [installments, setInstallments] = useState(2);
-  const [isOutdated, setIsOutdated] = useState(false);
-
-  useEffect(() => {
-    if (syncStatus === "sincronizado") {
-      localStorage.setItem("precis_last_sync_time", String(Date.now()));
-      setIsOutdated(false);
-    }
-  }, [syncStatus]);
-
-  useEffect(() => {
-    const check = () => {
-      const last = Number(localStorage.getItem("precis_last_sync_time") || Date.now());
-      const diff = Date.now() - last;
-      setIsOutdated(diff > 10 * 60 * 1000);
-    };
-    check();
-    const t = setInterval(check, 15000);
-    return () => clearInterval(t);
-  }, [syncStatus]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -237,32 +217,7 @@ export function AppLayout() {
       </aside>
 
       <main className="workspace">
-        {isOutdated && (
-          <div style={{
-            background: "rgba(239, 68, 68, 0.12)",
-            border: "1px solid rgba(239, 68, 68, 0.25)",
-            color: "#fca5a5",
-            padding: "10px 16px",
-            borderRadius: "var(--radius-sm)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16,
-            fontSize: "0.85rem",
-          }}>
-            <span>⚠️ <strong>Atenção:</strong> Conexão Open Finance sem atualizar há mais de 10 minutos.</span>
-            <button 
-              type="button" 
-              className="primary-action" 
-              style={{ padding: "4px 10px", fontSize: "0.75rem", background: "var(--red)", borderColor: "var(--red)", color: "#fff" }}
-              onClick={() => {
-                syncDatabase();
-              }}
-            >
-              🔄 Sincronizar Agora
-            </button>
-          </div>
-        )}
+
         {supabaseConfig.issues.length > 0 && (
           <section className="alerts">
             <article className="alert danger">
@@ -283,6 +238,42 @@ export function AppLayout() {
             <h1 id="viewTitle">Precis Finance</h1>
           </div>
           <div className="topbar-actions">
+            {rawState?.settings.spouseId && (
+              <div style={{ display: "flex", gap: 4, background: "var(--surface-2)", padding: 4, borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", marginRight: 12 }}>
+                <button
+                  type="button"
+                  style={{
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "var(--radius-xs)",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: !isFamilyMode ? "var(--brand)" : "transparent",
+                    color: !isFamilyMode ? "#fff" : "var(--ink)",
+                  }}
+                  onClick={() => setIsFamilyMode(false)}
+                >
+                  👤 Pessoal
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "var(--radius-xs)",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: isFamilyMode ? "var(--brand)" : "transparent",
+                    color: isFamilyMode ? "#fff" : "var(--ink)",
+                  }}
+                  onClick={() => setIsFamilyMode(true)}
+                >
+                  👨‍👩‍👧‍👦 Família
+                </button>
+              </div>
+            )}
             <label className="select-label">
               <span>Mês</span>
               <select

@@ -131,9 +131,75 @@ export function suggestCategory(state: FinanceState, text: string, type: "income
   return cat ? { categoryId: cat.id, subcategory: cat.subcategories[0] || "" } : null;
 }
 
-export function applyTransactionImpact(_state: FinanceState, _tx: Transaction, _direction: 1 | -1) {
-  // Checking account balances are strictly updated from Open Finance to prevent discrepancies.
-  // Manual transactions in the app are stored in the ledger but do not directly modify bank account balances.
+export function applyTransactionImpact(state: FinanceState, tx: Transaction, direction: 1 | -1) {
+  if (tx.date > new Date().toISOString().slice(0, 10)) return;
+  const account = state.accounts.find((a) => a.id === tx.accountId);
+  if (tx.type === "income" && account) account.balance += tx.amount * direction;
+  if (tx.type === "expense" && account && !tx.cardId) account.balance -= tx.amount * direction;
+  if (tx.type === "transfer" && account && !tx.cardId) {
+    account.balance -= tx.amount * direction;
+    if (tx.destAccountId) {
+      const dest = state.accounts.find((a) => a.id === tx.destAccountId);
+      if (dest) dest.balance += (tx.destAmount || tx.amount) * direction;
+    }
+  }
+}
+
+export function mergeStates(stateA: FinanceState, stateB: FinanceState | null): FinanceState {
+  if (!stateB) return stateA;
+
+  const next = JSON.parse(JSON.stringify(stateA)) as FinanceState;
+
+  // 1. Merge Accounts
+  const spouseAccounts = (stateB.accounts || []).map((a) => ({
+    ...a,
+    id: `spouse_${a.id}`,
+    name: `${a.name} (Cônjuge)`,
+  }));
+  next.accounts = [...next.accounts, ...spouseAccounts];
+
+  // 2. Merge Cards
+  const spouseCards = (stateB.cards || []).map((c) => ({
+    ...c,
+    id: `spouse_${c.id}`,
+    name: `${c.name} (Cônjuge)`,
+  }));
+  next.cards = [...next.cards, ...spouseCards];
+
+  // 3. Merge Transactions
+  const spouseTransactions = (stateB.transactions || []).map((t) => ({
+    ...t,
+    id: `spouse_${t.id}`,
+    accountId: t.accountId ? `spouse_${t.accountId}` : "",
+    cardId: t.cardId ? `spouse_${t.cardId}` : "",
+    destAccountId: t.destAccountId ? `spouse_${t.destAccountId}` : undefined,
+  }));
+  next.transactions = [...next.transactions, ...spouseTransactions].sort((a, b) => b.date.localeCompare(a.date));
+
+  // 4. Merge Recurring Bills
+  const spouseRecurring = (stateB.recurringBills || []).map((b) => ({
+    ...b,
+    id: `spouse_${b.id}`,
+  }));
+  next.recurringBills = [...(next.recurringBills || []), ...spouseRecurring];
+
+  // 5. Merge Investments
+  const spouseInvestments = (stateB.investments || []).map((i) => ({
+    ...i,
+    id: `spouse_${i.id}`,
+    name: `${i.name} (Cônjuge)`,
+  }));
+  next.investments = [...(next.investments || []), ...spouseInvestments];
+
+  // 6. Merge Goals
+  const spouseGoals = (stateB.goals || []).map((g) => ({
+    ...g,
+    id: `spouse_${g.id}`,
+    name: `${g.name} (Cônjuge)`,
+  }));
+  next.goals = [...(next.goals || []), ...spouseGoals];
+
+  return next;
 }
 
 export function lastMonths(from: string, count: number): string[] {

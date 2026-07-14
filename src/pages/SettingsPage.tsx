@@ -1,15 +1,35 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { useFinance } from "@/context/FinanceContext";
+import { useAuth } from "@/context/AuthContext";
 import { uid } from "@/lib/format";
 import type { Category } from "@/domain/types";
 
-type SettingsTab = "categories" | "preferences" | "danger-zone";
+type SettingsTab = "categories" | "preferences" | "family" | "danger-zone";
 type CatTab = "expense" | "income" | "fixed";
 
 export function SettingsPage() {
-  const { state, update } = useFinance();
+  const { user } = useAuth();
+  const { state, rawState, update } = useFinance();
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("categories");
   const [activeCatTab, setActiveCatTab] = useState<CatTab>("expense");
+  
+  const [spouseInput, setSpouseInput] = useState("");
+
+  // Sync state settings spouse ID to local input on load
+  useEffect(() => {
+    if (rawState?.settings?.spouseId) {
+      setSpouseInput(rawState.settings.spouseId);
+    }
+  }, [rawState?.settings?.spouseId]);
+
+  function handleSaveSpouse(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const id = spouseInput.trim();
+    update((s) => {
+      s.settings.spouseId = id || undefined;
+    });
+    alert("Vínculo de Conta Conjunta atualizado com sucesso!");
+  }
   
   // Categories states
   const [editingCat, setEditingCat] = useState<Category | null>(null);
@@ -140,6 +160,23 @@ export function SettingsPage() {
             onClick={() => setActiveSettingsTab("preferences")}
           >
             ⚙️ Preferências Gerais
+          </button>
+          <button
+            type="button"
+            className={`secondary-action ${activeSettingsTab === "family" ? "active-action" : ""}`}
+            style={{
+              padding: "10px 14px",
+              textAlign: "left",
+              justifyContent: "flex-start",
+              fontWeight: 700,
+              background: activeSettingsTab === "family" ? "var(--brand)" : "transparent",
+              color: activeSettingsTab === "family" ? "#fff" : "var(--ink)",
+              border: activeSettingsTab === "family" ? "none" : "1px solid var(--line)",
+              borderRadius: "var(--radius-sm)"
+            }}
+            onClick={() => setActiveSettingsTab("family")}
+          >
+            👨‍👩‍👧‍👦 Conta Conjunta
           </button>
           <button
             type="button"
@@ -312,6 +349,77 @@ export function SettingsPage() {
           )}
 
           {/* TAB 3: DANGER ZONE */}
+          {activeSettingsTab === "family" && (
+            <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <h3 style={{ margin: 0 }}>👨‍👩‍👧‍👦 Conta Conjunta & Compartilhamento</h3>
+              <p className="muted" style={{ margin: 0 }}>
+                Conecte a sua conta com a do seu cônjuge para ver os saldos, faturas e lançamentos consolidados no Modo Família.
+              </p>
+              
+              <div style={{ padding: "16px 0", borderTop: "1px solid var(--line)" }}>
+                <strong>Seu ID de Compartilhamento:</strong>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={user?.id || ""}
+                    style={{ flex: 1, fontFamily: "monospace", padding: "8px 12px", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)" }}
+                  />
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => {
+                      navigator.clipboard.writeText(user?.id || "");
+                      alert("ID copiado para a área de transferência!");
+                    }}
+                  >
+                    📋 Copiar ID
+                  </button>
+                </div>
+                <small className="muted" style={{ display: "block", marginTop: 4 }}>
+                  Envie este ID para seu cônjuge para que ele possa vincular as contas.
+                </small>
+              </div>
+
+              <form onSubmit={handleSaveSpouse} style={{ padding: "16px 0", borderTop: "1px solid var(--line)" }}>
+                <strong>Vincular Cônjuge:</strong>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Insira o ID de Compartilhamento do seu cônjuge"
+                    value={spouseInput}
+                    onChange={(e) => setSpouseInput(e.target.value)}
+                    style={{ flex: 1, padding: "8px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", color: "var(--ink)" }}
+                  />
+                  <button type="submit" className="primary-action">
+                    💾 Salvar Vínculo
+                  </button>
+                </div>
+                {rawState?.settings.spouseId && (
+                  <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, color: "var(--green)" }}>
+                    <span>✅ Vinculado ao ID: <code>{rawState.settings.spouseId}</code></span>
+                    <button
+                      type="button"
+                      className="ghost-action"
+                      style={{ color: "var(--red)", fontSize: "0.8rem", padding: "2px 6px" }}
+                      onClick={() => {
+                        if (window.confirm("Deseja realmente desvincular seu cônjuge?")) {
+                          update((s) => {
+                            s.settings.spouseId = undefined;
+                          });
+                          setSpouseInput("");
+                          alert("Cônjuge desvinculado.");
+                        }
+                      }}
+                    >
+                      Desvincular
+                    </button>
+                  </div>
+                )}
+              </form>
+            </div>
+          )}
+
           {activeSettingsTab === "danger-zone" && (
             <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 20, borderLeft: "6px solid var(--red)" }}>
               <h3 style={{ margin: 0, color: "var(--red)" }}>Zona de Perigo</h3>

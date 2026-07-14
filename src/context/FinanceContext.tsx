@@ -1,15 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import type { FinanceState, SyncStatus, Transaction, Investment, TxType, RecurringBill } from "@/domain/types";
 import { createDemoState, createEmptyState, normalizeState } from "@/domain/seed";
-import { applyTransactionImpact } from "@/domain/finance";
+import { applyTransactionImpact, mergeStates } from "@/domain/finance";
 import { FinanceStateRepository } from "@/repositories/FinanceStateRepository";
 import { useAuth } from "./AuthContext";
 import { uid } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import { syncAll } from "@/pluggy";
 
 interface FinanceCtx {
   state: FinanceState | null;
+  rawState: FinanceState | null;
+  spouseState: FinanceState | null;
+  isFamilyMode: boolean;
+  setIsFamilyMode: (val: boolean) => void;
   syncStatus: SyncStatus;
   ready: boolean;
   setSelectedMonth: (m: string) => void;
@@ -32,107 +35,30 @@ interface FinanceCtx {
 
 const FinanceContext = createContext<FinanceCtx | null>(null);
 
-// Helper function to merge Supabase tables (pluggy_accounts, precis_cards, precis_entries) into FinanceState
+// Helper function to merge Supabase tables (precis_entries, precis_recurring_bills) into FinanceState (Manual ONLY)
 async function mergeDatabaseIntoState(baseState: FinanceState, userId: string): Promise<FinanceState> {
   const next = JSON.parse(JSON.stringify(baseState)) as FinanceState;
 
   try {
-    // 1. Fetch Open Finance checking and savings accounts
-    const { data: dbAccounts } = await supabase
-      .from("pluggy_accounts")
-      .select("*")
-      .eq("user_id", userId);
+    // Keep only manual items in state arrays
+    next.accounts = (next.accounts || []).filter((a) => a.source === "manual");
+    next.cards = (next.cards || []).filter((c) => c.source === "manual");
+    next.transactions = (next.transactions || []).filter((t) => t.source === "manual");
+    next.investments = (next.investments || []).filter((i) => i.source === "manual");
 
-    // Keep only manual accounts
-    next.accounts = next.accounts.filter((a) => a.source !== "pluggy" && !a.pluggyAccountId);
-
-    if (dbAccounts && dbAccounts.length > 0) {
-      // Append Open Finance accounts
-      dbAccounts.forEach((acc: any) => {
-        if (acc.type !== "CREDIT") {
-          // Detect bank colors for premium design
-          let color = "#1e293b";
-          const bankName = (acc.marketing_name || acc.name || "").toLowerCase();
-          if (bankName.includes("nubank")) color = "#830ad1";
-          else if (bankName.includes("itau") || bankName.includes("itaú")) color = "#ff6a00";
-          else if (bankName.includes("bradesco")) color = "#cc092f";
-          else if (bankName.includes("inter")) color = "#ff7a00";
-          else if (bankName.includes("santander")) color = "#ec0000";
-          else if (bankName.includes("caixa")) color = "#1f509e";
-          else if (bankName.includes("brasil") || bankName.includes("bb")) color = "#fcf803";
-
-          next.accounts.push({
-            id: acc.account_id,
-            name: acc.marketing_name || acc.name || "Conta Open Finance",
-            type: acc.subtype === "CHECKING_ACCOUNT" ? "Conta Corrente" : acc.subtype === "SAVINGS_ACCOUNT" ? "Poupança" : "Conta",
-            currency: acc.currency_code || "BRL",
-            balance: Number(acc.balance || 0),
-            color,
-            source: "pluggy",
-            pluggyAccountId: acc.account_id,
-            pluggyItemId: acc.item_id,
-          });
-        }
-      });
-    }
-
-    // Keep only manual cards
-    next.cards = next.cards.filter((c) => c.source === "manual");
-
-    // 3. Fetch precis entries (transactions) - Manual only!
+    // 1. Fetch precis entries (transactions) - Manual only
     const { data: dbEntries } = await supabase
       .from("precis_entries")
       .select("*")
       .eq("user_id", userId)
       .eq("source", "manual");
 
-    // Keep only manual local transactions
-    next.transactions = next.transactions.filter((t) => t.source !== "pluggy");
-
     if (dbEntries && dbEntries.length > 0) {
-      // Remove any local transactions that are already stored in the DB
+      // Remove any local transactions that are already stored in the DB to avoid duplicates
       next.transactions = next.transactions.filter((t) => !dbEntries.some((e) => e.id === t.id));
 
-      // Append database transactions
       dbEntries.forEach((e: any) => {
         let type: TxType = e.direction === "credit" ? "income" : "expense";
-        let categoryId = e.category_id || "outros";
-        const desc = (e.description || "").toLowerCase();
-
-        // 1. Detect investment transfers
-        const isInvestment = /rdb|cdb|aplicac|resgate|invest|poupanca|poupança/i.test(desc);
-        if (isInvestment) {
-          type = "transfer";
-          categoryId = "cat_investment";
-        }
-
-        // 2. Detect transfers between own accounts
-        const isTransfer = /transfer|ted|doc|pix|recebida|enviada/i.test(desc);
-        const isOwn = /pablo.*melo/i.test(desc);
-        if (isTransfer && isOwn) {
-          type = "transfer";
-          categoryId = "cat_transfer";
-        }
-
-        // 3. Fallback standard categories if not classified
-        if (categoryId === "outros" || !categoryId) {
-          if (/supermercado|mercado|ifood|refeicao|restaurante|pizzaria|burger/i.test(desc)) {
-            categoryId = "cat_food";
-          } else if (/aluguel|condominio|reforma|energia|luz|agua|gás|gas|internet/i.test(desc)) {
-            categoryId = "cat_home";
-          } else if (/uber|cabify|99taxis|posto|combustivel|gasolina|pedagio|estaciona/i.test(desc)) {
-            categoryId = "cat_transport";
-          } else if (/farmacia|drogaria|saude|hospital|medico|odonto|clinica/i.test(desc)) {
-            categoryId = "cat_health";
-          } else if (/netflix|spotify|prime|hbo|disney|globo/i.test(desc)) {
-            categoryId = "cat_subs";
-          } else if (/fatura|anuidade|tarifa|juros/i.test(desc)) {
-            categoryId = "cat_cards";
-          } else if (/cinema|teatro|show|viagem|decolar|hotel|voo|lazer/i.test(desc)) {
-            categoryId = "cat_leisure";
-          }
-        }
-
         next.transactions.push({
           id: e.id,
           type,
@@ -142,14 +68,13 @@ async function mergeDatabaseIntoState(baseState: FinanceState, userId: string): 
           currency: e.currency_code || "BRL",
           accountId: e.account_id || "",
           cardId: e.card_id || "",
-          categoryId,
+          categoryId: e.category_id || "outros",
           subcategory: e.subcategory || "",
           tags: (e.tags || []).join(", "),
           location: "",
           note: e.notes || "",
           recurring: false,
-          source: e.source === "openfinance" ? "pluggy" : "manual",
-          pluggyTransactionId: e.source_ref || undefined,
+          source: "manual",
           reviewed: e.reviewed ?? true,
           ignored: e.ignored ?? false,
           createdAt: e.created_at,
@@ -157,62 +82,54 @@ async function mergeDatabaseIntoState(baseState: FinanceState, userId: string): 
         });
       });
 
-      // Sort descending by date
       next.transactions.sort((a, b) => b.date.localeCompare(a.date));
     }
 
-    // 4. Fetch Open Finance investments
-    const { data: dbInvestments } = await supabase
-      .from("pluggy_investments")
-      .select("*")
-      .eq("user_id", userId);
-
-    if (!next.investments) next.investments = [];
-    next.investments = next.investments.filter((i) => i.source !== "pluggy");
-
-    if (dbInvestments && dbInvestments.length > 0) {
-      dbInvestments.forEach((inv: any) => {
-        next.investments.push({
-          id: inv.investment_id,
-          name: inv.name || "Investimento Open Finance",
-          type: inv.type || "Renda Fixa",
-          subtype: inv.subtype || "Outros",
-          balance: Number(inv.balance || 0),
-          currency: inv.currency_code || "BRL",
-          source: "pluggy",
-        });
-      });
-    }
-
-    // 5. Fetch recurring bills
+    // 2. Fetch recurring bills
     const { data: dbBills } = await supabase
       .from("precis_recurring_bills")
       .select("*")
       .eq("user_id", userId);
 
-    next.recurringBills = [];
     if (dbBills && dbBills.length > 0) {
+      next.recurringBills = next.recurringBills || [];
+      next.recurringBills = next.recurringBills.filter((b) => !dbBills.some((db) => db.id === b.id));
       dbBills.forEach((b: any) => {
         next.recurringBills!.push({
           id: b.id,
+          type: b.type || "expense",
           description: b.description,
           amount: Number(b.amount || 0),
           dueDay: b.due_day || 10,
-          categoryId: b.category_id || "outros",
+          categoryId: b.category_id || "",
           createdAt: b.created_at,
         });
       });
     }
-  } catch (err) {
-    console.error("Erro ao sincronizar tabelas com o estado", err);
+  } catch (e) {
+    console.error("Erro ao sincronizar tabelas manuais:", e);
   }
 
   return next;
-}
+};
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const { user, configured } = useAuth();
-  const [state, setState] = useState<FinanceState | null>(null);
+  const [rawState, setRawState] = useState<FinanceState | null>(null);
+  const [spouseState, setSpouseState] = useState<FinanceState | null>(null);
+  const [isFamilyMode, setIsFamilyMode] = useState(() => localStorage.getItem("is_family_mode") === "true");
+
+  useEffect(() => {
+    localStorage.setItem("is_family_mode", String(isFamilyMode));
+  }, [isFamilyMode]);
+
+  const state = useMemo(() => {
+    if (isFamilyMode && spouseState && rawState) {
+      return mergeStates(rawState, spouseState);
+    }
+    return rawState;
+  }, [isFamilyMode, spouseState, rawState]);
+
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("desconectado");
   const [ready, setReady] = useState(false);
   const [showQuickInsert, setShowQuickInsert] = useState(false);
@@ -248,12 +165,43 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const syncSpouseState = useCallback(async (spouseId: string) => {
+    if (!spouseId || !configured) {
+      setSpouseState(null);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("finance_states")
+        .select("state")
+        .eq("user_id", spouseId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.state) {
+        setSpouseState(normalizeState(data.state));
+      } else {
+        setSpouseState(null);
+      }
+    } catch (e) {
+      console.warn("Could not load spouse state:", e);
+      setSpouseState(null);
+    }
+  }, [configured]);
+
+  useEffect(() => {
+    if (rawState?.settings.spouseId) {
+      syncSpouseState(rawState.settings.spouseId);
+    } else {
+      setSpouseState(null);
+    }
+  }, [rawState?.settings.spouseId, syncSpouseState]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setReady(false);
       if (!user) {
-        setState(createEmptyState());
+        setRawState(createEmptyState());
         setSyncStatus(configured ? "desconectado" : "somente local");
         setReady(true);
         return;
@@ -283,11 +231,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
       if (configured) {
         loaded = await mergeDatabaseIntoState(loaded, user.id);
-        syncAll(supabase).catch((e) => console.warn("Background Open Finance sync skipped/failed", e));
       }
 
       if (!cancelled) {
-        setState(loaded);
+        setRawState(loaded);
         setSyncStatus(cloud ? "sincronizado" : "somente local");
         setReady(true);
       }
@@ -308,7 +255,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         baseState = cloud?.state ?? createEmptyState();
       }
       const merged = await mergeDatabaseIntoState(baseState, user.id);
-      setState(merged);
+      setRawState(merged);
       setSyncStatus("sincronizado");
     } catch (e) {
       console.error(e);
@@ -316,63 +263,34 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [user, configured]);
 
-  const syncTimer = useRef<ReturnType<typeof setTimeout>>();
-
-  const triggerRealtimeSync = useCallback(() => {
-    if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => {
-      syncDatabase();
-    }, 500);
-  }, [syncDatabase]);
-
   useEffect(() => {
     if (!user || !configured) return;
 
     const channel = supabase
-      .channel("open-finance-realtime")
+      .channel("finance-states-realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "pluggy_accounts", filter: `user_id=eq.${user.id}` },
-        () => {
-          console.log("Realtime: pluggy_accounts mudou");
-          triggerRealtimeSync();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "precis_cards", filter: `user_id=eq.${user.id}` },
-        () => {
-          console.log("Realtime: precis_cards mudou");
-          triggerRealtimeSync();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "precis_entries", filter: `user_id=eq.${user.id}` },
-        () => {
-          console.log("Realtime: precis_entries mudou");
-          triggerRealtimeSync();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pluggy_investments", filter: `user_id=eq.${user.id}` },
-        () => {
-          console.log("Realtime: pluggy_investments mudou");
-          triggerRealtimeSync();
+        { event: "*", schema: "public", table: "finance_states" },
+        (payload: any) => {
+          console.log("Realtime: finance_states mudou", payload);
+          if (payload.new && payload.new.user_id === user.id) {
+            syncDatabase();
+          }
+          if (payload.new && rawState?.settings.spouseId && payload.new.user_id === rawState.settings.spouseId) {
+            syncSpouseState(rawState.settings.spouseId);
+          }
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      if (syncTimer.current) clearTimeout(syncTimer.current);
     };
-  }, [user, configured, triggerRealtimeSync]);
+  }, [user, configured, rawState?.settings.spouseId, syncDatabase, syncSpouseState]);
 
   const update = useCallback(
     (fn: (s: FinanceState) => void, _message?: string) => {
-      setState((prev) => {
+      setRawState((prev) => {
         if (!prev) return prev;
         const next = normalizeState(JSON.parse(JSON.stringify(prev)) as FinanceState);
         fn(next);
@@ -385,6 +303,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const value: FinanceCtx = {
     state,
+    rawState,
+    spouseState,
+    isFamilyMode,
+    setIsFamilyMode,
     syncStatus,
     ready,
     showQuickInsert,
@@ -462,13 +384,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     },
     resetDemo: () => {
       const demo = createDemoState();
-      setState(demo);
+      setRawState(demo);
       scheduleSave(demo);
     },
     exportJson: () => JSON.stringify(state, null, 2),
     importJson: (json) => {
       const parsed = normalizeState(JSON.parse(json));
-      setState(parsed);
+      setRawState(parsed);
       scheduleSave(parsed);
     },
     syncDatabase,

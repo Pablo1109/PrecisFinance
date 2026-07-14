@@ -10,10 +10,8 @@ import { GoalsPage } from "@/pages/GoalsPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { AutomationPage } from "@/pages/AutomationPage";
 import { SecurityPage } from "@/pages/SecurityPage";
-import { OpenFinancePage } from "@/pages/OpenFinancePage";
-import { InvestmentsPage } from "@/pages/InvestmentsPage";
 import { CardsPage } from "@/routes/CardsPage";
-import { CorrectionPage } from "@/routes/CorrectionPage";
+import { InvestmentsPage } from "@/pages/InvestmentsPage";
 import { FixedBillsPage } from "@/pages/FixedBillsPage";
 import { EntriesPage } from "@/routes/EntriesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -38,8 +36,6 @@ export function AppRoutes() {
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="automacoes" element={<AutomationPage />} />
-          <Route path="open-finance" element={<OpenFinancePage />} />
-          <Route path="correcao/open-finance" element={<CorrectionPage />} />
           <Route path="seguranca" element={<SecurityPage />} />
         </Route>
       </Routes>
