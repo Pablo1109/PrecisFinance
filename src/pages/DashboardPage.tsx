@@ -19,6 +19,7 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
   const { rawState, spouseState } = useFinance();
   const [expandedAccounts, setExpandedAccounts] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
+  const [expandedTransactions, setExpandedTransactions] = useState(false);
 
   const state = useMemo(() => {
     if (consolidated && rawState) {
@@ -38,9 +39,13 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
     return state.transactions.filter(t => t.date === todayStr && !t.ignored);
   }, [state.transactions, todayStr]);
 
-  const recent = useMemo(() => {
-    return getMonthTransactions(state, month).slice(0, 6);
+  const allPeriodTxs = useMemo(() => {
+    return getMonthTransactions(state, month);
   }, [state, month]);
+
+  const recent = useMemo(() => {
+    return expandedTransactions ? allPeriodTxs : allPeriodTxs.slice(0, 6);
+  }, [allPeriodTxs, expandedTransactions]);
 
   const alerts = useMemo(() => {
     return [
@@ -313,7 +318,15 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
         <article className="panel bento-card transactions-card">
           <div className="panel-header">
             <h2>{todayTxs.length > 0 ? "Últimos Lançamentos do Dia" : "Lançamentos Recentes"}</h2>
-            <Link to="/lancamentos" className="ghost-action">Ver tudo</Link>
+            {allPeriodTxs.length > 6 && (
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => setExpandedTransactions(!expandedTransactions)}
+              >
+                {expandedTransactions ? "Recolher" : "Expandir"}
+              </button>
+            )}
           </div>
           
           {todayTxs.length > 0 ? (
