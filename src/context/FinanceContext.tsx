@@ -447,10 +447,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           const installmentsCount = opts?.installments || 2;
           const splitAmount = +(totalAmount / installmentsCount).toFixed(2);
           const [y, m, d] = tx.date.split("-").map(Number);
+          const installmentGroupId = uid("instg");
 
           for (let i = 0; i < installmentsCount; i++) {
             let nextYear = y;
-            let nextMonth = m + i;
+            let nextMonth = m + 1 + i;
             while (nextMonth > 12) {
               nextMonth -= 12;
               nextYear += 1;
@@ -473,6 +474,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               recurring: false,
               source: "manual",
               createdAt: new Date().toISOString(),
+              installmentGroupId,
+              installmentIndex: i + 1,
+              installmentTotal: installmentsCount,
             };
 
             s.transactions.push(subTx);

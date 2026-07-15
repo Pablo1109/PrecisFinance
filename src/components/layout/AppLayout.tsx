@@ -135,7 +135,7 @@ export function AppLayout() {
       
       for (let i = 0; i < installments; i++) {
         let nextYear = y;
-        let nextMonth = m + i;
+        let nextMonth = m + 1 + i;
         while (nextMonth > 12) {
           nextMonth -= 12;
           nextYear += 1;
