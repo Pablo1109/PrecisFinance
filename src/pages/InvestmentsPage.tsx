@@ -1,7 +1,6 @@
 import { FormEvent, useMemo, useState, useEffect } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money, uid } from "@/lib/format";
-import { Link } from "react-router-dom";
 import type { Investment } from "@/domain/types";
 
 export function InvestmentsPage() {
@@ -245,17 +244,7 @@ export function InvestmentsPage() {
         </div>
       </section>
 
-      {/* Notice to sync or add manual */}
-      <section className="panel" style={{ marginBottom: 20, background: "rgba(59, 130, 246, 0.04)", borderColor: "rgba(59, 130, 246, 0.15)", padding: "16px 20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <p className="muted" style={{ margin: 0, fontSize: "0.88rem" }}>
-            💡 Seus investimentos do Open Finance não estão batendo? Bancos podem demorar alguns minutos para carregar dados novos. Tente rodar uma sincronização manual.
-          </p>
-          <Link to="/open-finance" className="primary-action" style={{ fontSize: "0.82rem", padding: "8px 14px", minHeight: "auto" }}>
-            ↻ Sincronizar Open Finance
-          </Link>
-        </div>
-      </section>
+
 
       {/* Portfolio Header Cards */}
       <section className="metric-grid">
@@ -509,8 +498,7 @@ export function InvestmentsPage() {
           ) : (
             <div className="chart-empty-state" style={{ marginTop: 24 }}>
               <div className="empty-chart-icon">💰</div>
-              <p className="muted" style={{ marginBottom: 16 }}>Nenhum investimento registrado. Sincronize seu Open Finance ou adicione um investimento manual!</p>
-              <Link to="/open-finance" className="secondary-action">Ir para Open Finance</Link>
+              <p className="muted" style={{ marginBottom: 16 }}>Nenhum investimento registrado. Adicione um ativo no formulário manual para começar!</p>
             </div>
           )}
         </article>
