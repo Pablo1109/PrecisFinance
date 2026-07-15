@@ -14,7 +14,7 @@ for select
 to authenticated
 using (
   auth.uid() = user_id 
-  or (state -> 'settings' ->> 'spouseId')::uuid = auth.uid()
+  or state -> 'settings' ->> 'spouseId' = auth.uid()::text
 );
 
 
