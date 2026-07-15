@@ -2,7 +2,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useFinance } from "@/context/FinanceContext";
 import { totalPatrimony, currentMonth, monthLabel, suggestCategory } from "@/domain/finance";
-import { money } from "@/lib/format";
+import { money, uid } from "@/lib/format";
 import { supabaseConfig } from "@/lib/supabase";
 import { useMemo, useState, useEffect, FormEvent } from "react";
 import type { TxType } from "@/domain/types";
@@ -130,6 +130,8 @@ export function AppLayout() {
     if (type === "expense" && cardId && isSplit && installments > 1) {
       const splitAmount = +(parsedAmount / installments).toFixed(2);
       const [y, m, d] = date.split("-").map(Number);
+      const installmentGroupId = uid("instg");
+      const installmentTotal = installments;
       
       for (let i = 0; i < installments; i++) {
         let nextYear = y;
@@ -154,6 +156,9 @@ export function AppLayout() {
           location: "",
           note: `Parcela ${i + 1}/${installments} de ${description}`,
           recurring: false,
+          installmentGroupId,
+          installmentIndex: i + 1,
+          installmentTotal,
         });
       }
     } else {

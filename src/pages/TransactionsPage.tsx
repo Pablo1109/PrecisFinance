@@ -5,9 +5,11 @@ import { fmtDate, money } from "@/lib/format";
 import type { TxType, Transaction } from "@/domain/types";
 
 export function TransactionsPage() {
-  const { state, deleteTransaction, updateTransaction, setShowQuickInsert } = useFinance();
+  const { state, deleteTransaction, updateTransaction, setShowQuickInsert, update } = useFinance();
   const [q, setQ] = useState("");
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [deletingGroupTx, setDeletingGroupTx] = useState<Transaction | null>(null);
+  const [editAllGroup, setEditAllGroup] = useState(false);
 
   if (!state) return null;
 
@@ -34,17 +36,38 @@ export function TransactionsPage() {
     const cardId = String(fd.get("cardId") || "");
     const categoryId = String(fd.get("categoryId") || "");
 
-    updateTransaction(editingTx.id, {
-      type,
-      description,
-      amount,
-      date,
-      accountId: type === "expense" && cardId ? "" : accountId,
-      cardId: type === "expense" ? cardId : "",
-      categoryId,
-    });
+    if (editingTx.installmentGroupId && editAllGroup) {
+      update((s) => {
+        s.transactions.forEach((t) => {
+          if (t.installmentGroupId === editingTx.installmentGroupId) {
+            t.type = type;
+            t.categoryId = categoryId;
+            t.cardId = type === "expense" ? cardId : "";
+            t.accountId = type === "expense" && cardId ? "" : accountId;
+            
+            // Retain the installment index label in descriptions if available
+            if (t.installmentIndex && t.installmentTotal) {
+              t.description = `${description} (${t.installmentIndex}/${t.installmentTotal})`;
+            } else {
+              t.description = description;
+            }
+          }
+        });
+      });
+    } else {
+      updateTransaction(editingTx.id, {
+        type,
+        description,
+        amount,
+        date,
+        accountId: type === "expense" && cardId ? "" : accountId,
+        cardId: type === "expense" ? cardId : "",
+        categoryId,
+      });
+    }
 
     setEditingTx(null);
+    setEditAllGroup(false);
   }
 
   return (
@@ -152,6 +175,45 @@ export function TransactionsPage() {
                   ))}
                 </select>
               </div>
+              {editingTx.installmentGroupId && (
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: 12, borderRadius: 8, margin: "16px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--brand)" }}>
+                    📦 Detalhes do Parcelamento (Parcela {editingTx.installmentIndex}/{editingTx.installmentTotal})
+                  </span>
+                  
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", cursor: "pointer", color: "var(--ink)" }}>
+                    <input
+                      type="checkbox"
+                      name="editAllGroup"
+                      checked={editAllGroup}
+                      onChange={(e) => setEditAllGroup(e.target.checked)}
+                      style={{ cursor: "pointer" }}
+                    />
+                    Aplicar alterações a todas as parcelas deste grupo
+                  </label>
+
+                  <button
+                    type="button"
+                    className="secondary-action small"
+                    style={{ fontSize: "0.75rem", padding: "6px 10px", marginTop: 4, width: "fit-content" }}
+                    onClick={() => {
+                      if (window.confirm("Deseja realmente antecipar todas as parcelas deste grupo para a fatura de " + month + "?")) {
+                        update((s) => {
+                          s.transactions.forEach((t) => {
+                            if (t.installmentGroupId === editingTx.installmentGroupId) {
+                              t.invoiceMonth = month;
+                            }
+                          });
+                        });
+                        alert("Todas as parcelas foram antecipadas para a fatura de " + month + "!");
+                        setEditingTx(null);
+                      }
+                    }}
+                  >
+                    ⚡ Antecipar todas as parcelas (Pagar tudo agora)
+                  </button>
+                </div>
+              )}
               <button type="submit" className="primary-action" style={{ marginTop: 12 }}>Salvar Alterações</button>
             </form>
           </div>
@@ -207,8 +269,12 @@ export function TransactionsPage() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button type="button" className="ghost-action" onClick={() => setEditingTx(t)}>Editar</button>
                       <button type="button" className="ghost-action" style={{ color: "var(--red)" }} onClick={() => {
-                        if (window.confirm("Tem certeza que deseja excluir este lançamento?")) {
-                          deleteTransaction(t.id);
+                        if (t.installmentGroupId) {
+                          setDeletingGroupTx(t);
+                        } else {
+                          if (window.confirm("Tem certeza que deseja excluir este lançamento?")) {
+                            deleteTransaction(t.id);
+                          }
                         }
                       }}>Excluir</button>
                     </div>
@@ -220,6 +286,59 @@ export function TransactionsPage() {
           </tbody>
         </table>
       </section>
+
+      {deletingGroupTx && (
+        <div className="quick-insert-backdrop" onClick={() => setDeletingGroupTx(null)}>
+          <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quick-insert-header">
+              <h2>Excluir Compra Parcelada</h2>
+              <button type="button" className="close-btn" onClick={() => setDeletingGroupTx(null)}>×</button>
+            </div>
+            <div style={{ padding: "8px 0" }}>
+              <p style={{ color: "var(--ink)" }}>
+                O lançamento <strong>{deletingGroupTx.description}</strong> faz parte de uma compra parcelada.
+              </p>
+              <p className="muted" style={{ fontSize: "0.85rem", marginTop: 4 }}>
+                Deseja excluir apenas esta parcela ou todo o parcelamento (todas as parcelas)?
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="primary-action"
+                style={{ background: "var(--red)", border: "none", display: "flex", gap: 6, alignItems: "center", justifyContent: "center" }}
+                onClick={() => {
+                  update((s) => {
+                    s.transactions = s.transactions.filter(
+                      (x) => x.installmentGroupId !== deletingGroupTx.installmentGroupId
+                    );
+                  });
+                  setDeletingGroupTx(null);
+                }}
+              >
+                🗑️ Excluir Todo o Parcelamento
+              </button>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => {
+                  deleteTransaction(deletingGroupTx.id);
+                  setDeletingGroupTx(null);
+                }}
+              >
+                Excluir Apenas Esta Parcela
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => setDeletingGroupTx(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
