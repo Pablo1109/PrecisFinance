@@ -320,7 +320,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     update,
     addTransaction: (tx) => {
       const txId = uid("tx");
-      const full: Transaction = { ...tx, id: txId, createdAt: new Date().toISOString() };
+      const full: Transaction = { ...tx, id: txId, createdAt: new Date().toISOString(), source: "manual" };
       update((s) => {
         s.transactions.unshift(full);
         applyTransactionImpact(s, full, 1);
