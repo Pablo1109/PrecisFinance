@@ -4,7 +4,7 @@ import { money, uid } from "@/lib/format";
 import type { Investment } from "@/domain/types";
 
 export function InvestmentsPage() {
-  const { state, update, addInvestment, deleteInvestment, updateInvestment } = useFinance();
+  const { state, update, addInvestment, deleteInvestment, updateInvestment, addTransaction } = useFinance();
   
   // State for index rates loaded from the BCB
   const [rates, setRates] = useState({ cdi: 14.15, ipca: 4.64, selic: 14.25 });
@@ -135,6 +135,7 @@ export function InvestmentsPage() {
 
   function handleAdd(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!state) return;
     const fd = new FormData(e.currentTarget);
     const name = String(fd.get("name") || "").trim();
     const type = String(fd.get("type") || "Renda Fixa");
@@ -142,6 +143,7 @@ export function InvestmentsPage() {
     const balance = Number(fd.get("balance") || 0);
     const yieldTypeVal = fd.get("yieldType") as any;
     const yieldRateVal = fd.get("yieldRate") ? Number(fd.get("yieldRate")) : undefined;
+    const sourceAccountId = String(fd.get("sourceAccountId") || "none");
 
     if (!name || balance <= 0) return;
 
@@ -173,6 +175,24 @@ export function InvestmentsPage() {
           yieldType,
           yieldRate,
         });
+      });
+    }
+
+    if (sourceAccountId !== "none" && addTransaction) {
+      addTransaction({
+        type: "expense",
+        date: `${state.settings.selectedMonth}-15`,
+        description: `Aplicação: ${name}`,
+        amount: balance,
+        currency: "BRL",
+        accountId: sourceAccountId,
+        cardId: "",
+        categoryId: "cat_investment",
+        subcategory: type,
+        tags: "investimento",
+        location: "",
+        note: `Débito automático para aplicação em ${name}`,
+        recurring: false,
       });
     }
 
@@ -352,9 +372,20 @@ export function InvestmentsPage() {
                   <input name="subtype" placeholder="Ex: CDB Liquidez Diária, FII" />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Saldo Atual</label>
+               <div className="form-group">
+                <label>Saldo Atual / Valor Aplicado</label>
                 <input name="balance" type="number" step="0.01" min="0.01" required placeholder="0.00" />
+              </div>
+              <div className="form-group">
+                <label>Origem dos Recursos (Debitar da Conta)</label>
+                <select name="sourceAccountId">
+                  <option value="none">Nenhuma (Apenas cadastrar ativo, sem débito)</option>
+                  {(state.accounts || []).filter(acc => acc.source === "manual").map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} (Saldo: {money(acc.balance)})
+                    </option>
+                  ))}
+                </select>
               </div>
               
               <div className="form-row-2">
