@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState, useEffect } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money } from "@/lib/format";
-import { cardSpent, shiftMonth, getBillStartMonth } from "@/domain/finance";
+import { cardSpent, shiftMonth } from "@/domain/finance";
 import { uid } from "@/lib/format";
 
 type RecurrenceTab = "expense" | "income";
@@ -46,13 +46,8 @@ export function FixedBillsPage() {
     });
   }, [state.categories, activeTab]);
 
-  // Calculate matching paid status for current month
   const billsStatus = useMemo(() => {
     return filteredList
-      .filter((b) => {
-        const startMonth = getBillStartMonth(b);
-        return month >= startMonth;
-      })
       .map((b) => {
         const tx = state.transactions.find(
           (t) =>
