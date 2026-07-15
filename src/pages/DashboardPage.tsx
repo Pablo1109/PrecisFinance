@@ -13,10 +13,12 @@ import {
 } from "@/domain/finance";
 import { money, fmtDate } from "@/lib/format";
 import { Link } from "react-router-dom";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 export function DashboardPage({ consolidated = false }: { consolidated?: boolean }) {
   const { rawState, spouseState } = useFinance();
+  const [expandedAccounts, setExpandedAccounts] = useState(false);
+  const [expandedCards, setExpandedCards] = useState(false);
 
   const state = useMemo(() => {
     if (consolidated && rawState) {
@@ -217,10 +219,18 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
         <article className="panel bento-card accounts-card">
           <div className="panel-header">
             <h2>Minhas Contas e Bancos</h2>
-            <Link to="/contas" className="ghost-action">Ver todas</Link>
+            {state.accounts.length > 4 && (
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => setExpandedAccounts(!expandedAccounts)}
+              >
+                {expandedAccounts ? "Recolher" : "Expandir"}
+              </button>
+            )}
           </div>
-          <div className="accounts-list-widget">
-            {state.accounts.slice(0, 4).map((acc) => (
+          <div className="accounts-list-widget" style={{ maxHeight: expandedAccounts ? "none" : 310, overflowY: "auto" }}>
+            {(expandedAccounts ? state.accounts : state.accounts.slice(0, 4)).map((acc) => (
               <div key={acc.id} className="account-row-item">
                 <div className="account-details">
                   <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
@@ -247,10 +257,18 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
         <article className="panel bento-card cards-card" style={{ gridColumn: "span 1" }}>
           <div className="panel-header">
             <h2>Faturas de Cartão</h2>
-            <Link to="/cartoes" className="ghost-action">Gerenciar</Link>
+            {state.cards.length > 2 && (
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => setExpandedCards(!expandedCards)}
+              >
+                {expandedCards ? "Recolher" : "Expandir"}
+              </button>
+            )}
           </div>
-          <div className="credit-cards-list-widget" style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", maxHeight: 310 }}>
-            {state.cards.map((c) => {
+          <div className="credit-cards-list-widget" style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", maxHeight: expandedCards ? "none" : 310 }}>
+            {(expandedCards ? state.cards : state.cards.slice(0, 2)).map((c) => {
               const spent = cardSpent(state, c.id, month);
               const payments = cardPayments(state, c.id, month);
               const outstanding = Math.max(0, spent - payments);
