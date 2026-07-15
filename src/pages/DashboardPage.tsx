@@ -19,7 +19,7 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
   const { rawState, spouseState } = useFinance();
 
   const state = useMemo(() => {
-    if (consolidated && rawState && spouseState) {
+    if (consolidated && rawState) {
       return mergeStates(rawState, spouseState);
     }
     return rawState;

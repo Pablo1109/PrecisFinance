@@ -199,16 +199,14 @@ export function AccountsPage() {
                 {money(a.balance, a.currency)}
               </div>
 
-              {!isPluggy && (
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: "auto", borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-                  <button type="button" className="ghost-action" style={{ fontSize: "0.8rem", padding: "4px 8px" }} onClick={() => setEditingAcc(a)}>
-                    ✏️ Editar
-                  </button>
-                  <button type="button" className="ghost-action" style={{ color: "var(--red)", fontSize: "0.8rem", padding: "4px 8px" }} onClick={() => handleDelete(a.id)}>
-                    🗑️ Excluir
-                  </button>
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: "auto", borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                <button type="button" className="ghost-action" style={{ fontSize: "0.8rem", padding: "4px 8px" }} onClick={() => setEditingAcc(a)}>
+                  ✏️ Editar
+                </button>
+                <button type="button" className="ghost-action" style={{ color: "var(--red)", fontSize: "0.8rem", padding: "4px 8px" }} onClick={() => handleDelete(a.id)}>
+                  🗑️ Excluir
+                </button>
+              </div>
             </article>
           );
         })}

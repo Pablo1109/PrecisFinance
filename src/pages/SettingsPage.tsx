@@ -4,16 +4,36 @@ import { useAuth } from "@/context/AuthContext";
 import { uid } from "@/lib/format";
 import type { Category } from "@/domain/types";
 
-type SettingsTab = "categories" | "preferences" | "family" | "danger-zone";
+type SettingsTab = "account" | "categories" | "preferences" | "family" | "danger-zone";
 type CatTab = "expense" | "income" | "fixed";
 
 export function SettingsPage() {
   const { user } = useAuth();
   const { state, rawState, update } = useFinance();
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("categories");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("account");
   const [activeCatTab, setActiveCatTab] = useState<CatTab>("expense");
   
   const [spouseInput, setSpouseInput] = useState("");
+  const [userNameInput, setUserNameInput] = useState("");
+
+  // Sync state settings userName to input
+  useEffect(() => {
+    if (rawState?.settings?.userName) {
+      setUserNameInput(rawState.settings.userName);
+    } else if (user) {
+      setUserNameInput(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
+    }
+  }, [rawState?.settings?.userName, user]);
+
+  function handleSaveAccount(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = userNameInput.trim();
+    if (!name) return;
+    update((s) => {
+      s.settings.userName = name;
+    });
+    alert("Nome de exibição atualizado com sucesso!");
+  }
 
   // Sync state settings spouse ID to local input on load
   useEffect(() => {
@@ -129,6 +149,23 @@ export function SettingsPage() {
         <aside style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <button
             type="button"
+            className={`secondary-action ${activeSettingsTab === "account" ? "active-action" : ""}`}
+            style={{
+              padding: "10px 14px",
+              textAlign: "left",
+              justifyContent: "flex-start",
+              fontWeight: 700,
+              background: activeSettingsTab === "account" ? "var(--brand)" : "transparent",
+              color: activeSettingsTab === "account" ? "var(--surface)" : "var(--ink)",
+              border: activeSettingsTab === "account" ? "none" : "1px solid var(--line)",
+              borderRadius: "var(--radius-sm)"
+            }}
+            onClick={() => setActiveSettingsTab("account")}
+          >
+            Minha Conta
+          </button>
+          <button
+            type="button"
             className={`secondary-action ${activeSettingsTab === "categories" ? "active-action" : ""}`}
             style={{
               padding: "10px 14px",
@@ -200,6 +237,67 @@ export function SettingsPage() {
         {/* Settings Content Box */}
         <div className="settings-content-wrapper">
           
+          {/* TAB 0: MINHA CONTA */}
+          {activeSettingsTab === "account" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Minha Conta & Perfil</h3>
+                <p className="muted">Gerencie suas credenciais de login e identificação no painel da família.</p>
+              </div>
+
+              <section className="panel" style={{ padding: 24 }}>
+                <form onSubmit={handleSaveAccount} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div className="form-group">
+                    <label>Seu E-mail (Login)</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={user?.email || ""}
+                      style={{ opacity: 0.7, cursor: "not-allowed" }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Seu ID de Usuário (Para vincular conta conjunta)</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        type="text"
+                        disabled
+                        value={user?.id || ""}
+                        style={{ fontFamily: "monospace", opacity: 0.7, cursor: "not-allowed", flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        onClick={() => {
+                          navigator.clipboard.writeText(user?.id || "");
+                          alert("ID copiado para a área de transferência!");
+                        }}
+                      >
+                        📋 Copiar ID
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Seu Nome de Exibição / Apelido (Como aparecerá nas transações)</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Pablo, Mariana..."
+                      value={userNameInput}
+                      onChange={(e) => setUserNameInput(e.target.value)}
+                    />
+                  </div>
+
+                  <button type="submit" className="primary-action" style={{ alignSelf: "flex-start", marginTop: 8 }}>
+                    💾 Salvar Alterações
+                  </button>
+                </form>
+              </section>
+            </div>
+          )}
+
           {/* TAB 1: CATEGORIES MANAGER */}
           {activeSettingsTab === "categories" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

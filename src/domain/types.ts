@@ -95,6 +95,7 @@ export interface Goal {
   deadline: string;
   currency: string;
   color: string;
+  userName?: string;
 }
 
 export interface Rule {
@@ -114,6 +115,7 @@ export interface Investment {
   source?: string;
   yieldRate?: number;
   yieldType?: "cdi" | "selic" | "pre" | "ipca";
+  userName?: string;
 }
 
 export interface Loan {
@@ -135,6 +137,7 @@ export interface RecurringBill {
   dueDay: number;
   categoryId: string;
   createdAt?: string;
+  userName?: string;
 }
 
 export interface FinanceState {

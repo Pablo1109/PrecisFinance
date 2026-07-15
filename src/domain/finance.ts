@@ -231,17 +231,29 @@ export function applyTransactionImpact(state: FinanceState, tx: Transaction, dir
 }
 
 export function mergeStates(stateA: FinanceState, stateB: FinanceState | null): FinanceState {
-  if (!stateB) return stateA;
-
   const next = JSON.parse(JSON.stringify(stateA)) as FinanceState;
   
   const mainName = stateA.settings?.userName || "Você";
-  const spouseName = stateB.settings?.userName || "Cônjuge";
 
   // 1. Tag main state items
   next.accounts.forEach((a) => { a.userName = mainName; });
   next.cards.forEach((c) => { c.userName = mainName; });
   next.transactions.forEach((t) => { t.userName = mainName; });
+  
+  if (next.recurringBills) {
+    next.recurringBills.forEach((b) => { b.userName = mainName; });
+  }
+  if (next.investments) {
+    next.investments.forEach((i) => { i.userName = mainName; });
+  }
+  if (next.goals) {
+    next.goals.forEach((g) => { g.userName = mainName; });
+  }
+
+  if (!stateB) return next;
+
+  const spouseName = stateB.settings?.userName || "Cônjuge";
+
 
   // 2. Merge Accounts
   const spouseAccounts = (stateB.accounts || []).map((a) => ({
