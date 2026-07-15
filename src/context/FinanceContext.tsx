@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { FinanceState, SyncStatus, Transaction, Investment, TxType, RecurringBill } from "@/domain/types";
 import { createDemoState, createEmptyState, normalizeState } from "@/domain/seed";
-import { applyTransactionImpact } from "@/domain/finance";
+import { applyTransactionImpact, getTransactionInvoiceMonth, shiftMonth } from "@/domain/finance";
 import { FinanceStateRepository } from "@/repositories/FinanceStateRepository";
 import { useAuth } from "./AuthContext";
 import { uid } from "@/lib/format";
@@ -449,14 +449,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           const [y, m, d] = tx.date.split("-").map(Number);
           const installmentGroupId = uid("instg");
 
+          let startInvoiceMonth = getTransactionInvoiceMonth(
+            { date: tx.date, cardId: opts?.cardId || tx.cardId || "", type: "expense", amount: totalAmount } as any,
+            s.cards
+          );
+          if (startInvoiceMonth === s.settings.selectedMonth) {
+            startInvoiceMonth = shiftMonth(startInvoiceMonth, 1);
+          }
+
           for (let i = 0; i < installmentsCount; i++) {
             let nextYear = y;
-            let nextMonth = m + 1 + i;
+            let nextMonth = m + i;
             while (nextMonth > 12) {
               nextMonth -= 12;
               nextYear += 1;
             }
             const dateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            const invMonth = shiftMonth(startInvoiceMonth, i);
+            
             const subTx: Transaction = {
               id: uid("tx"),
               type: tx.type,
@@ -477,6 +487,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               installmentGroupId,
               installmentIndex: i + 1,
               installmentTotal: installmentsCount,
+              invoiceMonth: invMonth,
             };
 
             s.transactions.push(subTx);

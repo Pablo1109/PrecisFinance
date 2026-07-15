@@ -1,7 +1,7 @@
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useFinance } from "@/context/FinanceContext";
-import { totalPatrimony, currentMonth, monthLabel, suggestCategory } from "@/domain/finance";
+import { totalPatrimony, currentMonth, monthLabel, suggestCategory, getTransactionInvoiceMonth, shiftMonth } from "@/domain/finance";
 import { money, uid } from "@/lib/format";
 import { supabaseConfig } from "@/lib/supabase";
 import { useMemo, useState, useEffect, FormEvent } from "react";
@@ -132,15 +132,24 @@ export function AppLayout() {
       const [y, m, d] = date.split("-").map(Number);
       const installmentGroupId = uid("instg");
       const installmentTotal = installments;
+
+      let startInvoiceMonth = getTransactionInvoiceMonth(
+        { date, cardId, type: "expense", amount: parsedAmount } as any,
+        state.cards
+      );
+      if (startInvoiceMonth === state.settings.selectedMonth) {
+        startInvoiceMonth = shiftMonth(startInvoiceMonth, 1);
+      }
       
       for (let i = 0; i < installments; i++) {
         let nextYear = y;
-        let nextMonth = m + 1 + i;
+        let nextMonth = m + i;
         while (nextMonth > 12) {
           nextMonth -= 12;
           nextYear += 1;
         }
         const dateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const invMonth = shiftMonth(startInvoiceMonth, i);
         
         addTransaction({
           type: "expense",
@@ -159,6 +168,7 @@ export function AppLayout() {
           installmentGroupId,
           installmentIndex: i + 1,
           installmentTotal,
+          invoiceMonth: invMonth,
         });
       }
     } else {
