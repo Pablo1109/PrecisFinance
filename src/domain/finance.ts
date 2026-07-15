@@ -63,6 +63,9 @@ export function getMonthTransactions(state: FinanceState, month: string): Transa
 export function monthlyTotals(state: FinanceState, month: string) {
   return getInvoiceTransactions(state, month).reduce(
     (acc, t) => {
+      if (t.categoryId === "cat_investment" || t.categoryId === "cat_transfer") {
+        return acc;
+      }
       const value = convertToBase(state, t.amount, t.currency);
       if (t.type === "income") acc.income += value;
       else if (t.type === "expense") acc.expense += value;
@@ -143,7 +146,7 @@ export function categorySpent(state: FinanceState, categoryId: string, month: st
 export function expenseByCategory(state: FinanceState, month: string) {
   const map = new Map<string, { name: string; color: string; total: number }>();
   getInvoiceTransactions(state, month)
-    .filter((t) => t.type === "expense")
+    .filter((t) => t.type === "expense" && t.categoryId !== "cat_investment" && t.categoryId !== "cat_transfer")
     .forEach((t) => {
       const cat = state.categories.find((c) => c.id === t.categoryId) || { id: "none", name: "Sem categoria", color: "#65716d" };
       const cur = map.get(cat.id) || { name: cat.name, color: cat.color, total: 0 };
