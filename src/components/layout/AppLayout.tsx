@@ -129,7 +129,7 @@ export function AppLayout() {
 
     if (type === "expense" && cardId && isSplit && installments > 1) {
       const splitAmount = +(parsedAmount / installments).toFixed(2);
-      const [y, m, d] = date.split("-").map(Number);
+      const d = Number(date.split("-")[2]);
       const installmentGroupId = uid("instg");
       const installmentTotal = installments;
 
@@ -142,14 +142,13 @@ export function AppLayout() {
       }
       
       for (let i = 0; i < installments; i++) {
-        let nextYear = y;
-        let nextMonth = m + i;
-        while (nextMonth > 12) {
-          nextMonth -= 12;
-          nextYear += 1;
-        }
-        const dateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
         const invMonth = shiftMonth(startInvoiceMonth, i);
+        const [invY, invM] = invMonth.split("-").map(Number);
+        
+        // Handle max days of month safely (e.g. 31st of February)
+        const lastDay = new Date(invY, invM, 0).getDate();
+        const finalDay = Math.min(d, lastDay);
+        const dateStr = `${invY}-${String(invM).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
         
         addTransaction({
           type: "expense",

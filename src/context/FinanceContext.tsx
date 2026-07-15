@@ -446,7 +446,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           const totalAmount = tx.amount;
           const installmentsCount = opts?.installments || 2;
           const splitAmount = +(totalAmount / installmentsCount).toFixed(2);
-          const [y, m, d] = tx.date.split("-").map(Number);
+          const d = Number(tx.date.split("-")[2]);
           const installmentGroupId = uid("instg");
 
           let startInvoiceMonth = getTransactionInvoiceMonth(
@@ -458,14 +458,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           }
 
           for (let i = 0; i < installmentsCount; i++) {
-            let nextYear = y;
-            let nextMonth = m + i;
-            while (nextMonth > 12) {
-              nextMonth -= 12;
-              nextYear += 1;
-            }
-            const dateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
             const invMonth = shiftMonth(startInvoiceMonth, i);
+            const [invY, invM] = invMonth.split("-").map(Number);
+            
+            // Handle max days of month safely (e.g. 31st of February)
+            const lastDay = new Date(invY, invM, 0).getDate();
+            const finalDay = Math.min(d, lastDay);
+            const dateStr = `${invY}-${String(invM).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
             
             const subTx: Transaction = {
               id: uid("tx"),
