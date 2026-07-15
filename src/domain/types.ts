@@ -108,6 +108,8 @@ export interface Investment {
   balance: number;
   currency: string;
   source?: string;
+  yieldRate?: number;
+  yieldType?: "cdi" | "selic" | "pre" | "ipca";
 }
 
 export interface Loan {

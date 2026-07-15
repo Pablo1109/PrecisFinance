@@ -26,6 +26,7 @@ interface FinanceCtx {
   syncDatabase: () => Promise<void>;
   addInvestment: (inv: Omit<Investment, "id">) => void;
   deleteInvestment: (id: string) => void;
+  updateInvestment: (id: string, updates: Partial<Investment>) => void;
   reviewTransaction: (id: string, action: "ignore" | "debit" | "credit" | "split", opts?: { cardId?: string; installments?: number }) => Promise<void>;
   addRecurringBill: (bill: Omit<RecurringBill, "id">) => Promise<void>;
   deleteRecurringBill: (id: string) => Promise<void>;
@@ -407,6 +408,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       update((s) => {
         if (!s.investments) s.investments = [];
         s.investments = s.investments.filter((i) => i.id !== id);
+      }),
+    updateInvestment: (id, updates) =>
+      update((s) => {
+        if (!s.investments) s.investments = [];
+        const idx = s.investments.findIndex((i) => i.id === id);
+        if (idx !== -1) {
+          s.investments[idx] = { ...s.investments[idx], ...updates };
+        }
       }),
     reviewTransaction: async (id, action, opts) => {
       update((s) => {
