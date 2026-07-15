@@ -138,6 +138,9 @@ export interface RecurringBill {
   categoryId: string;
   createdAt?: string;
   userName?: string;
+  paymentMethod?: "account" | "card";
+  accountId?: string;
+  cardId?: string;
 }
 
 export interface FinanceState {

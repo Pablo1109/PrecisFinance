@@ -17,6 +17,8 @@ export function FixedBillsPage() {
   // States for paying/receiving a bill
   const [payingBill, setPayingBill] = useState<any | null>(null);
   const [payAccount, setPayAccount] = useState("");
+  const [payCard, setPayCard] = useState("");
+  const [payMethod, setPayMethod] = useState<"account" | "card">("account");
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState("");
 
@@ -25,6 +27,12 @@ export function FixedBillsPage() {
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState(10);
   const [catId, setCatId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"account" | "card">("account");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedCardId, setSelectedCardId] = useState("");
+
+  // Form states for editing
+  const [editPaymentMethod, setEditPaymentMethod] = useState<"account" | "card">("account");
 
   if (!state) return null;
 
@@ -98,16 +106,35 @@ export function FixedBillsPage() {
     };
   }, [state, month, rawBills]);
 
+  // Auto-initialize form default accounts and cards
+  useEffect(() => {
+    if (state.accounts?.length && !selectedAccountId) {
+      setSelectedAccountId(state.accounts[0].id);
+    }
+    if (state.cards?.length && !selectedCardId) {
+      setSelectedCardId(state.cards[0].id);
+    }
+  }, [state, selectedAccountId, selectedCardId]);
+
   useEffect(() => {
     if (payingBill) {
-      setPayAccount(state.accounts[0]?.id || "");
       setPayAmount(String(payingBill.amount));
       
       const currentYearMonth = month;
       const dayStr = String(payingBill.dueDay).padStart(2, "0");
       setPayDate(`${currentYearMonth}-${dayStr}`);
+
+      if (payingBill.paymentMethod === "card") {
+        setPayMethod("card");
+        setPayCard(payingBill.cardId || state.cards[0]?.id || "");
+        setPayAccount("");
+      } else {
+        setPayMethod("account");
+        setPayAccount(payingBill.accountId || state.accounts[0]?.id || "");
+        setPayCard("");
+      }
     }
-  }, [payingBill, month, state.accounts]);
+  }, [payingBill, month, state.accounts, state.cards]);
 
   function handlePaySubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -122,8 +149,8 @@ export function FixedBillsPage() {
       description: payingBill.description,
       amount: parsedAmount,
       currency: "BRL",
-      accountId: payAccount,
-      cardId: "",
+      accountId: activeTab === "expense" && payMethod === "card" ? "" : payAccount,
+      cardId: activeTab === "expense" && payMethod === "card" ? payCard : "",
       categoryId: payingBill.categoryId,
       subcategory: "",
       tags: "Contas Fixas",
@@ -152,6 +179,9 @@ export function FixedBillsPage() {
         dueDay,
         categoryId: catId || activeCategories[0]?.id || "",
         createdAt: new Date().toISOString(),
+        paymentMethod: activeTab === "expense" ? paymentMethod : undefined,
+        accountId: activeTab === "expense" && paymentMethod === "account" ? selectedAccountId : undefined,
+        cardId: activeTab === "expense" && paymentMethod === "card" ? selectedCardId : undefined,
       });
     });
 
@@ -170,6 +200,9 @@ export function FixedBillsPage() {
     const amountVal = Number(fd.get("amount"));
     const dueDayVal = Number(fd.get("dueDay"));
     const categoryId = String(fd.get("categoryId") || "");
+    const method = String(fd.get("paymentMethod") || "account") as "account" | "card";
+    const accId = String(fd.get("accountId") || "");
+    const crdId = String(fd.get("cardId") || "");
 
     update((s) => {
       const b = (s.recurringBills || []).find((x) => x.id === editingBill.id);
@@ -178,6 +211,9 @@ export function FixedBillsPage() {
         b.amount = amountVal;
         b.dueDay = dueDayVal;
         b.categoryId = categoryId;
+        b.paymentMethod = activeTab === "expense" ? method : undefined;
+        b.accountId = activeTab === "expense" && method === "account" ? accId : undefined;
+        b.cardId = activeTab === "expense" && method === "card" ? crdId : undefined;
       }
     });
 
@@ -313,7 +349,18 @@ export function FixedBillsPage() {
                   return (
                     <tr key={b.id}>
                       <td><strong>Dia {b.dueDay}</strong></td>
-                      <td>{b.description}</td>
+                      <td>
+                        {b.description}
+                        {b.type === "expense" && (
+                          <span style={{ fontSize: "0.75rem", color: "var(--muted)", display: "block", marginTop: 2 }}>
+                            {b.paymentMethod === "card" ? (
+                              <>💳 Cartão: {state.cards.find(x => x.id === b.cardId)?.name || "Não especificado"}</>
+                            ) : (
+                              <>🏦 Conta: {state.accounts.find(x => x.id === b.accountId)?.name || "Padrão"}</>
+                            )}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <span className="category-tag" style={{ background: cat?.color || "#64748b" }}>
                           {cat?.name || "Sem categoria"}
@@ -345,7 +392,10 @@ export function FixedBillsPage() {
                             type="button"
                             className="ghost-action"
                             style={{ fontSize: "0.8rem", padding: "4px 8px" }}
-                            onClick={() => setEditingBill(b)}
+                            onClick={() => {
+                              setEditingBill(b);
+                              setEditPaymentMethod(b.paymentMethod || "account");
+                            }}
                           >
                             Editar
                           </button>
@@ -409,7 +459,7 @@ export function FixedBillsPage() {
                   required
                 />
               </div>
-              <div className="form-group">
+               <div className="form-group">
                 <label>Categoria Correspondente</label>
                 <select
                   value={catId}
@@ -423,6 +473,51 @@ export function FixedBillsPage() {
                   ))}
                 </select>
               </div>
+
+              {activeTab === "expense" && (
+                <>
+                  <div className="form-group">
+                    <label>Forma de Pagamento</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value as "account" | "card")}
+                    >
+                      <option value="account">Conta Bancária (Saldo)</option>
+                      <option value="card">Cartão de Crédito</option>
+                    </select>
+                  </div>
+
+                  {paymentMethod === "account" ? (
+                    <div className="form-group">
+                      <label>Conta para Débito</label>
+                      <select
+                        value={selectedAccountId}
+                        onChange={(e) => setSelectedAccountId(e.target.value)}
+                        required
+                      >
+                        <option value="" disabled>Selecione uma conta...</option>
+                        {state.accounts.map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label>Cartão de Crédito</label>
+                      <select
+                        value={selectedCardId}
+                        onChange={(e) => setSelectedCardId(e.target.value)}
+                        required
+                      >
+                        <option value="" disabled>Selecione um cartão...</option>
+                        {state.cards.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
               <button type="submit" className="primary-action" disabled={busy} style={{ marginTop: 12 }}>
                 Salvar Recorrência
               </button>
@@ -483,6 +578,52 @@ export function FixedBillsPage() {
                   ))}
                 </select>
               </div>
+
+              {activeTab === "expense" && (
+                <>
+                  <div className="form-group">
+                    <label>Forma de Pagamento</label>
+                    <select
+                      name="paymentMethod"
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value as "account" | "card")}
+                    >
+                      <option value="account">Conta Bancária (Saldo)</option>
+                      <option value="card">Cartão de Crédito</option>
+                    </select>
+                  </div>
+
+                  {editPaymentMethod === "account" ? (
+                    <div className="form-group">
+                      <label>Conta para Débito</label>
+                      <select
+                        name="accountId"
+                        defaultValue={editingBill.accountId || state.accounts[0]?.id || ""}
+                        required
+                      >
+                        <option value="" disabled>Selecione uma conta...</option>
+                        {state.accounts.map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label>Cartão de Crédito</label>
+                      <select
+                        name="cardId"
+                        defaultValue={editingBill.cardId || state.cards[0]?.id || ""}
+                        required
+                      >
+                        <option value="" disabled>Selecione um cartão...</option>
+                        {state.cards.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
               <button type="submit" className="primary-action" style={{ marginTop: 12 }}>
                 Salvar Alterações
               </button>
@@ -505,21 +646,68 @@ export function FixedBillsPage() {
                 <p style={{ margin: "4px 0 0 0", fontSize: "0.9rem" }}>Valor Base: <strong>{money(payingBill.amount)}</strong></p>
               </div>
 
-              <div className="form-group">
-                <label>{activeTab === "expense" ? "Conta de Origem (Pagamento)" : "Conta de Destino (Recebimento)"}</label>
-                <select
-                  value={payAccount}
-                  onChange={(e) => setPayAccount(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Selecione uma conta...</option>
-                  {state.accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} (Saldo: {money(a.balance)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {activeTab === "expense" && (
+                <>
+                  <div className="form-group">
+                    <label>Forma de Pagamento</label>
+                    <select
+                      value={payMethod}
+                      onChange={(e) => setPayMethod(e.target.value as "account" | "card")}
+                    >
+                      <option value="account">Conta Bancária (Saldo)</option>
+                      <option value="card">Cartão de Crédito</option>
+                    </select>
+                  </div>
+
+                  {payMethod === "account" ? (
+                    <div className="form-group">
+                      <label>Conta para Débito</label>
+                      <select
+                        value={payAccount}
+                        onChange={(e) => setPayAccount(e.target.value)}
+                        required
+                      >
+                        <option value="" disabled>Selecione uma conta...</option>
+                        {state.accounts.map((a) => (
+                          <option key={a.id} value={a.id}>{a.name} (Saldo: {money(a.balance)})</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label>Cartão de Crédito</label>
+                      <select
+                        value={payCard}
+                        onChange={(e) => setPayCard(e.target.value)}
+                        required
+                      >
+                        <option value="" disabled>Selecione um cartão...</option>
+                        {state.cards.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {activeTab === "income" && (
+                <div className="form-group">
+                  <label>Conta de Destino (Recebimento)</label>
+                  <select
+                    value={payAccount}
+                    onChange={(e) => setPayAccount(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Selecione uma conta...</option>
+                    {state.accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} (Saldo: {money(a.balance)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="form-row-2">
                 <div className="form-group">

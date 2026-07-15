@@ -104,6 +104,9 @@ async function mergeDatabaseIntoState(baseState: FinanceState, userId: string): 
           dueDay: b.due_day || 10,
           categoryId: b.category_id || "",
           createdAt: b.created_at,
+          paymentMethod: b.payment_method || undefined,
+          accountId: b.account_id || undefined,
+          cardId: b.card_id || undefined,
         });
       });
     }
@@ -523,6 +526,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           amount: bill.amount,
           due_day: bill.dueDay,
           category_id: bill.categoryId,
+          payment_method: bill.paymentMethod || null,
+          account_id: bill.accountId || null,
+          card_id: bill.cardId || null,
         });
         if (error) console.error("Erro ao cadastrar conta fixa no banco", error);
       }
