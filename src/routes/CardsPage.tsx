@@ -1,7 +1,7 @@
 import { FormEvent, useState, useMemo } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money, uid, fmtDate } from "@/lib/format";
-import { cardSpent, getTransactionInvoiceMonth, cardPayments } from "@/domain/finance";
+import { cardSpent, getTransactionInvoiceMonth, cardPayments, getActiveInvoiceMonth } from "@/domain/finance";
 import type { Transaction } from "@/domain/types";
 
 export function CardsPage() {
@@ -301,8 +301,9 @@ export function CardsPage() {
       <section className="credit-cards-list-widget" style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
         {cardsList.map((c) => {
           const limit = c.limit || 0;
-          const invoice = cardSpent(state, c.id, state.settings.selectedMonth);
-          const payments = cardPayments(state, c.id, state.settings.selectedMonth);
+          const activeMonth = getActiveInvoiceMonth(state, c);
+          const invoice = cardSpent(state, c.id, activeMonth);
+          const payments = cardPayments(state, c.id, activeMonth);
           const outstandingInvoice = Math.max(0, invoice - payments);
           const available = limit - outstandingInvoice;
           const usedPct = limit > 0 ? Math.min((outstandingInvoice / limit) * 100, 100) : 0;
@@ -325,7 +326,7 @@ export function CardsPage() {
                   
                   <div className="card-details-row" style={{ marginTop: 8 }}>
                     <div className="card-out-balance" style={{ display: "flex", flexDirection: "column" }}>
-                      <span className="card-label" style={{ fontSize: "0.75rem", opacity: 0.7 }}>Saldo Devedor Fatura ({state.settings.selectedMonth})</span>
+                      <span className="card-label" style={{ fontSize: "0.75rem", opacity: 0.7 }}>Saldo Devedor Fatura ({activeMonth})</span>
                       <span className="card-value" style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "Sora, sans-serif" }}>{money(outstandingInvoice)}</span>
                     </div>
                   </div>

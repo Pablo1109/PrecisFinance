@@ -95,6 +95,45 @@ export function cardOutstanding(state: FinanceState, cardId: string, month: stri
   return Math.max(0, cardSpent(state, cardId, month) - cardPayments(state, cardId, month));
 }
 
+export function openInvoiceMonth(card: Card): string {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [year, month, day] = todayStr.split("-").map(Number);
+  const dueDay = Math.max(1, Math.min(31, Number(card.dueDay) || day));
+  const closingDay = Math.max(1, Math.min(31, Number(card.closingDay) || day));
+
+  let monthOffset = day > closingDay ? 1 : 0;
+  if (dueDay <= closingDay) {
+    monthOffset += 1;
+  }
+
+  const base = new Date(year, month - 1 + monthOffset, 1);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function getActiveInvoiceMonth(state: FinanceState, card: Card): string {
+  const openMonth = openInvoiceMonth(card);
+
+  // Check 6 months back and 6 months forward to find any unpaid invoices
+  const monthsSet = new Set<string>();
+  monthsSet.add(openMonth);
+  for (let i = -6; i <= 6; i++) {
+    monthsSet.add(shiftMonth(openMonth, i));
+  }
+
+  const sortedMonths = Array.from(monthsSet).sort();
+
+  for (const m of sortedMonths) {
+    const spent = cardSpent(state, card.id, m);
+    const payments = cardPayments(state, card.id, m);
+    const outstanding = spent - payments;
+    if (outstanding > 0.01) {
+      return m; // Return oldest unpaid invoice month
+    }
+  }
+
+  return openMonth; // Fallback to current open month
+}
+
 export function categorySpent(state: FinanceState, categoryId: string, month: string): number {
   return getInvoiceTransactions(state, month)
     .filter((t) => t.type === "expense" && t.categoryId === categoryId)
