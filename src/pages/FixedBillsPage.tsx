@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useEffect } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money } from "@/lib/format";
 import { cardSpent, shiftMonth } from "@/domain/finance";
@@ -7,12 +7,18 @@ import { uid } from "@/lib/format";
 type RecurrenceTab = "expense" | "income";
 
 export function FixedBillsPage() {
-  const { state, update } = useFinance();
+  const { state, update, addTransaction } = useFinance();
   
   const [activeTab, setActiveTab] = useState<RecurrenceTab>("expense");
   const [showAdd, setShowAdd] = useState(false);
   const [editingBill, setEditingBill] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // States for paying/receiving a bill
+  const [payingBill, setPayingBill] = useState<any | null>(null);
+  const [payAccount, setPayAccount] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState("");
 
   // Form states for adding
   const [desc, setDesc] = useState("");
@@ -91,6 +97,43 @@ export function FixedBillsPage() {
       netForecast,
     };
   }, [state, month, rawBills]);
+
+  useEffect(() => {
+    if (payingBill) {
+      setPayAccount(state.accounts[0]?.id || "");
+      setPayAmount(String(payingBill.amount));
+      
+      const currentYearMonth = month;
+      const dayStr = String(payingBill.dueDay).padStart(2, "0");
+      setPayDate(`${currentYearMonth}-${dayStr}`);
+    }
+  }, [payingBill, month, state.accounts]);
+
+  function handlePaySubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!payingBill) return;
+
+    const parsedAmount = Number(payAmount);
+    if (!parsedAmount || parsedAmount <= 0) return;
+
+    addTransaction({
+      type: activeTab,
+      date: payDate,
+      description: payingBill.description,
+      amount: parsedAmount,
+      currency: "BRL",
+      accountId: payAccount,
+      cardId: "",
+      categoryId: payingBill.categoryId,
+      subcategory: "",
+      tags: "Contas Fixas",
+      location: "",
+      note: `Pagamento da conta fixa "${payingBill.description}"`,
+      recurring: false,
+    });
+
+    setPayingBill(null);
+  }
 
   function handleAdd(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -283,7 +326,17 @@ export function FixedBillsPage() {
                             {activeTab === "expense" ? "Pago" : "Recebido"} em {b.paymentDate}
                           </span>
                         ) : (
-                          <span className="pill danger" style={{ fontSize: "0.75rem" }}>Pendente</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span className="pill danger" style={{ fontSize: "0.75rem" }}>Pendente</span>
+                            <button
+                              type="button"
+                              className="primary-action small"
+                              style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "auto" }}
+                              onClick={() => setPayingBill(b)}
+                            >
+                              {activeTab === "expense" ? "Pagar" : "Receber"}
+                            </button>
+                          </div>
                         )}
                       </td>
                       <td>
@@ -433,6 +486,71 @@ export function FixedBillsPage() {
               <button type="submit" className="primary-action" style={{ marginTop: 12 }}>
                 Salvar Alterações
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Pay Bill Modal */}
+      {payingBill && (
+        <div className="quick-insert-backdrop" onClick={() => setPayingBill(null)}>
+          <div className="quick-insert-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quick-insert-header">
+              <h2>{activeTab === "expense" ? "💵 Pagar Conta Fixa" : "💵 Receber Lançamento Fixo"}</h2>
+              <button type="button" className="close-btn" onClick={() => setPayingBill(null)}>×</button>
+            </div>
+            <form onSubmit={handlePaySubmit} className="quick-insert-form">
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: "0.9rem" }}>Lançamento: <strong>{payingBill.description}</strong></p>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.9rem" }}>Valor Base: <strong>{money(payingBill.amount)}</strong></p>
+              </div>
+
+              <div className="form-group">
+                <label>{activeTab === "expense" ? "Conta de Origem (Pagamento)" : "Conta de Destino (Recebimento)"}</label>
+                <select
+                  value={payAccount}
+                  onChange={(e) => setPayAccount(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>Selecione uma conta...</option>
+                  {state.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} (Saldo: {money(a.balance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label>Valor Pago / Recebido</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Data de Pagamento</label>
+                  <input
+                    type="date"
+                    required
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+                <button type="button" className="secondary-action" onClick={() => setPayingBill(null)} style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+                <button type="submit" className="primary-action" style={{ flex: 1 }}>
+                  Confirmar
+                </button>
+              </div>
             </form>
           </div>
         </div>
