@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState, useEffect } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { money } from "@/lib/format";
-import { cardSpent, shiftMonth } from "@/domain/finance";
+import { cardSpent, shiftMonth, getBillStartMonth } from "@/domain/finance";
 import { uid } from "@/lib/format";
 
 type RecurrenceTab = "expense" | "income";
@@ -48,21 +48,26 @@ export function FixedBillsPage() {
 
   // Calculate matching paid status for current month
   const billsStatus = useMemo(() => {
-    return filteredList.map((b) => {
-      const tx = state.transactions.find(
-        (t) =>
-          t.date.slice(0, 7) === month &&
-          (t.categoryId === b.categoryId ||
-            t.description.toLowerCase().includes(b.description.toLowerCase())) &&
-          t.type === activeTab &&
-          !t.ignored
-      );
-      return {
-        ...b,
-        isPaid: !!tx,
-        paymentDate: tx ? tx.date : null,
-      };
-    });
+    return filteredList
+      .filter((b) => {
+        const startMonth = getBillStartMonth(b);
+        return month >= startMonth;
+      })
+      .map((b) => {
+        const tx = state.transactions.find(
+          (t) =>
+            t.date.slice(0, 7) === month &&
+            (t.categoryId === b.categoryId ||
+              t.description.toLowerCase().includes(b.description.toLowerCase())) &&
+            t.type === activeTab &&
+            !t.ignored
+        );
+        return {
+          ...b,
+          isPaid: !!tx,
+          paymentDate: tx ? tx.date : null,
+        };
+      });
   }, [filteredList, state.transactions, month, activeTab]);
 
   // Next Month Projection Card math

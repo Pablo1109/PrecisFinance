@@ -1,4 +1,4 @@
-import type { FinanceState, Transaction, Card } from "./types";
+import type { FinanceState, Transaction, Card, RecurringBill } from "./types";
 
 export function currentMonth(): string {
   const n = new Date();
@@ -126,6 +126,10 @@ export function billReminderAlerts(state: FinanceState, month: string) {
   (state.recurringBills || [])
     .filter((b) => (b.type || "expense") === "expense")
     .forEach((b) => {
+      // Skip if the current month is before the bill's first active month
+      const startMonth = getBillStartMonth(b);
+      if (month < startMonth) return;
+
       const isPaid = (state.transactions || []).some(
         (t) => t.categoryId === b.categoryId && t.date.slice(0, 7) === month && !t.ignored
       );
@@ -285,4 +289,23 @@ export function mergeStates(stateA: FinanceState, stateB: FinanceState | null): 
 
 export function lastMonths(from: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => shiftMonth(from, -(count - 1 - i)));
+}
+
+export function getBillStartMonth(b: RecurringBill): string {
+  if (!b.createdAt) return "2000-01";
+  const createdDate = new Date(b.createdAt);
+  const createdYear = createdDate.getFullYear();
+  const createdMonth = createdDate.getMonth();
+  const createdDay = createdDate.getDate();
+  
+  if (b.dueDay && b.dueDay < createdDay) {
+    const nextMonthDate = new Date(createdYear, createdMonth + 1, 1);
+    const ny = nextMonthDate.getFullYear();
+    const nm = String(nextMonthDate.getMonth() + 1).padStart(2, "0");
+    return `${ny}-${nm}`;
+  }
+  
+  const cy = createdYear;
+  const cm = String(createdMonth + 1).padStart(2, "0");
+  return `${cy}-${cm}`;
 }
