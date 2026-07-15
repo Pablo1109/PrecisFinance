@@ -14,7 +14,7 @@ import {
 } from "@/domain/finance";
 import { money, fmtDate } from "@/lib/format";
 import { Link } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 
 export function DashboardPage({ consolidated = false }: { consolidated?: boolean }) {
   const { rawState, spouseState } = useFinance();
@@ -48,12 +48,33 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
     return expandedTransactions ? allPeriodTxs : allPeriodTxs.slice(0, 6);
   }, [allPeriodTxs, expandedTransactions]);
 
+  const [dismissedList, setDismissedList] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("precis-dismissed-alerts");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismiss = useCallback((alertKey: string) => {
+    setDismissedList((prev) => {
+      const next = [...prev, alertKey];
+      localStorage.setItem("precis-dismissed-alerts", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const alerts = useMemo(() => {
     return [
       ...billReminderAlerts(state, month),
       ...budgetAlerts(state, month)
     ];
   }, [state, month]);
+
+  const visibleAlerts = useMemo(() => {
+    return alerts.filter((a) => !dismissedList.includes(`${a.title}:${a.message}`));
+  }, [alerts, dismissedList]);
 
   // Category Expenses Calculation
   const expensesByCat = useMemo(() => expenseByCategory(state, month), [state, month]);
@@ -102,14 +123,39 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
 
   return (
     <>
-      {alerts.length > 0 && (
+      {visibleAlerts.length > 0 && (
         <section className="alerts" style={{ marginBottom: 24 }}>
-          {alerts.slice(0, 6).map((a, i) => (
+          {visibleAlerts.slice(0, 6).map((a, i) => (
             <article key={i} className={`alert ${a.level}`}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <strong>{a.title}</strong>
                 <p>{a.message}</p>
               </div>
+              <button 
+                onClick={() => handleDismiss(`${a.title}:${a.message}`)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "inherit",
+                  opacity: 0.6,
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  fontSize: "1.2rem",
+                  fontWeight: "bold",
+                  alignSelf: "center",
+                  marginLeft: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "4px",
+                  transition: "opacity 0.2s"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
+                title="Dispensar aviso"
+              >
+                &times;
+              </button>
             </article>
           ))}
         </section>
