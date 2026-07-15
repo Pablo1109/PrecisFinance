@@ -10,6 +10,7 @@ import {
   expenseByCategory,
   shiftMonth,
   mergeStates,
+  getActiveInvoiceMonth,
 } from "@/domain/finance";
 import { money, fmtDate } from "@/lib/format";
 import { Link } from "react-router-dom";
@@ -274,8 +275,9 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
           </div>
           <div className="credit-cards-list-widget" style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", maxHeight: expandedCards ? "none" : 310 }}>
             {(expandedCards ? state.cards : state.cards.slice(0, 2)).map((c) => {
-              const spent = cardSpent(state, c.id, month);
-              const payments = cardPayments(state, c.id, month);
+              const activeInvoiceMonth = getActiveInvoiceMonth(state, c);
+              const spent = cardSpent(state, c.id, activeInvoiceMonth);
+              const payments = cardPayments(state, c.id, activeInvoiceMonth);
               const outstanding = Math.max(0, spent - payments);
               const pct = c.limit ? Math.min(100, (outstanding / c.limit) * 100) : 0;
               const c1 = (c.color || "#6366f1").split(",")[0];
@@ -286,6 +288,9 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       <strong style={{ fontSize: "0.95rem" }}>{c.name}</strong>
+                      <span style={{ fontSize: "0.7rem", opacity: 0.85, fontWeight: 600, marginTop: 1 }}>
+                        📅 Fatura: {activeInvoiceMonth.slice(5, 7)}/{activeInvoiceMonth.slice(0, 4)}
+                      </span>
                       {consolidated && c.userName && (
                         <span style={{ fontSize: "0.68rem", opacity: 0.85, fontWeight: 600, marginTop: 1 }}>
                           👤 {c.userName}
