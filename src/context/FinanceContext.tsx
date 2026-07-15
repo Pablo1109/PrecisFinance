@@ -234,6 +234,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         loaded = legacy ?? createDemoState();
       }
 
+      if (user) {
+        if (!loaded.settings) loaded.settings = { baseCurrency: "BRL", selectedMonth: "", rates: {}, autoCategorization: true };
+        if (!loaded.settings.userName) {
+          loaded.settings.userName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Você";
+        }
+      }
+
       if (configured) {
         loaded = await mergeDatabaseIntoState(loaded, user.id);
       }

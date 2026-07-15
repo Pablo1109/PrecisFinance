@@ -6,6 +6,7 @@ export interface FinanceSettings {
   rates: Record<string, number>;
   autoCategorization: boolean;
   spouseId?: string;
+  userName?: string;
 }
 
 export interface Account {
@@ -18,6 +19,7 @@ export interface Account {
   source?: "pluggy" | "manual";
   pluggyAccountId?: string;
   pluggyItemId?: string;
+  userName?: string;
 }
 
 export interface Card {
@@ -34,6 +36,7 @@ export interface Card {
   userEdited?: boolean;
   pluggyAccountId?: string;
   invoiceAmount?: number;
+  userName?: string;
 }
 
 export interface Category {
@@ -74,6 +77,7 @@ export interface Transaction {
   ignored?: boolean;
   createdAt: string;
   updatedAt?: string;
+  userName?: string;
 }
 
 export interface Budget {

@@ -226,7 +226,14 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
                   <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
                   <div>
                     <strong>{acc.name}</strong>
-                    <span className="account-source-badge">{acc.source === "pluggy" ? "Open Finance" : "Manual"}</span>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+                      <span className="account-source-badge">{acc.source === "pluggy" ? "Open Finance" : "Manual"}</span>
+                      {consolidated && acc.userName && (
+                        <span style={{ fontSize: "0.68rem", padding: "1px 5px", borderRadius: 4, background: "var(--line)", color: "var(--muted)", fontWeight: 600 }}>
+                          👤 {acc.userName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <span className="account-balance-value">{money(acc.balance)}</span>
@@ -254,7 +261,14 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
               return (
                 <div key={c.id} className="credit-card-mockup-mini" style={{ background: gradient, color: "#fff", padding: "14px 16px", borderRadius: "var(--radius-sm)", display: "flex", flexDirection: "column", gap: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong style={{ fontSize: "0.95rem" }}>{c.name}</strong>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <strong style={{ fontSize: "0.95rem" }}>{c.name}</strong>
+                      {consolidated && c.userName && (
+                        <span style={{ fontSize: "0.68rem", opacity: 0.85, fontWeight: 600, marginTop: 1 }}>
+                          👤 {c.userName}
+                        </span>
+                      )}
+                    </div>
                     <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>{c.brand}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -296,7 +310,24 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
                       </span>
                       <div className="tx-text">
                         <strong>{t.description}</strong>
-                        <span>Hoje · {cat?.name || "Sem categoria"}</span>
+                        <span>
+                          Hoje · {cat?.name || "Sem categoria"}
+                          {consolidated && t.userName && (
+                            <span 
+                              style={{ 
+                                marginLeft: 8, 
+                                padding: "2px 6px", 
+                                borderRadius: 4, 
+                                fontSize: "0.68rem", 
+                                background: t.userName === (rawState?.settings.userName || "Você") ? "rgba(99, 102, 241, 0.12)" : "rgba(16, 185, 129, 0.12)",
+                                color: t.userName === (rawState?.settings.userName || "Você") ? "var(--brand)" : "var(--green)",
+                                fontWeight: 600
+                              }}
+                            >
+                              {t.userName}
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </div>
                     <strong className={`tx-amount-value ${t.type}`}>
@@ -318,7 +349,24 @@ export function DashboardPage({ consolidated = false }: { consolidated?: boolean
                       </span>
                       <div className="tx-text">
                         <strong>{t.description}</strong>
-                        <span>{fmtDate(t.date)} · {cat?.name || "Sem categoria"}</span>
+                        <span>
+                          {fmtDate(t.date)} · {cat?.name || "Sem categoria"}
+                          {consolidated && t.userName && (
+                            <span 
+                              style={{ 
+                                marginLeft: 8, 
+                                padding: "2px 6px", 
+                                borderRadius: 4, 
+                                fontSize: "0.68rem", 
+                                background: t.userName === (rawState?.settings.userName || "Você") ? "rgba(99, 102, 241, 0.12)" : "rgba(16, 185, 129, 0.12)",
+                                color: t.userName === (rawState?.settings.userName || "Você") ? "var(--brand)" : "var(--green)",
+                                fontWeight: 600
+                              }}
+                            >
+                              {t.userName}
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </div>
                     <strong className={`tx-amount-value ${t.type}`}>

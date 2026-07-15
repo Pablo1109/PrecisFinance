@@ -234,55 +234,69 @@ export function mergeStates(stateA: FinanceState, stateB: FinanceState | null): 
   if (!stateB) return stateA;
 
   const next = JSON.parse(JSON.stringify(stateA)) as FinanceState;
+  
+  const mainName = stateA.settings?.userName || "Você";
+  const spouseName = stateB.settings?.userName || "Cônjuge";
 
-  // 1. Merge Accounts
+  // 1. Tag main state items
+  next.accounts.forEach((a) => { a.userName = mainName; });
+  next.cards.forEach((c) => { c.userName = mainName; });
+  next.transactions.forEach((t) => { t.userName = mainName; });
+
+  // 2. Merge Accounts
   const spouseAccounts = (stateB.accounts || []).map((a) => ({
     ...a,
     id: `spouse_${a.id}`,
-    name: `${a.name} (Cônjuge)`,
+    name: `${a.name} (${spouseName})`,
+    userName: spouseName,
   }));
   next.accounts = [...next.accounts, ...spouseAccounts];
 
-  // 2. Merge Cards
+  // 3. Merge Cards
   const spouseCards = (stateB.cards || []).map((c) => ({
     ...c,
     id: `spouse_${c.id}`,
-    name: `${c.name} (Cônjuge)`,
+    name: `${c.name} (${spouseName})`,
+    userName: spouseName,
   }));
   next.cards = [...next.cards, ...spouseCards];
 
-  // 3. Merge Transactions
+  // 4. Merge Transactions
   const spouseTransactions = (stateB.transactions || []).map((t) => ({
     ...t,
     id: `spouse_${t.id}`,
     accountId: t.accountId ? `spouse_${t.accountId}` : "",
     cardId: t.cardId ? `spouse_${t.cardId}` : "",
     destAccountId: t.destAccountId ? `spouse_${t.destAccountId}` : undefined,
+    userName: spouseName,
   }));
   next.transactions = [...next.transactions, ...spouseTransactions].sort((a, b) => b.date.localeCompare(a.date));
 
-  // 4. Merge Recurring Bills
+  // 5. Merge Recurring Bills
   const spouseRecurring = (stateB.recurringBills || []).map((b) => ({
     ...b,
     id: `spouse_${b.id}`,
+    userName: spouseName,
   }));
-  next.recurringBills = [...(next.recurringBills || []), ...spouseRecurring];
+  next.recurringBills = [...(next.recurringBills || []).map(b => ({ ...b, userName: mainName })), ...spouseRecurring];
 
-  // 5. Merge Investments
+  // 6. Merge Investments
   const spouseInvestments = (stateB.investments || []).map((i) => ({
     ...i,
     id: `spouse_${i.id}`,
-    name: `${i.name} (Cônjuge)`,
+    name: `${i.name} (${spouseName})`,
+    userName: spouseName,
   }));
-  next.investments = [...(next.investments || []), ...spouseInvestments];
+  next.investments = [...(next.investments || []).map(i => ({ ...i, userName: mainName })), ...spouseInvestments];
 
-  // 6. Merge Goals
+  // 7. Merge Goals
   const spouseGoals = (stateB.goals || []).map((g) => ({
     ...g,
     id: `spouse_${g.id}`,
-    name: `${g.name} (Cônjuge)`,
+    name: `${g.name} (${spouseName})`,
+    userName: spouseName,
   }));
-  next.goals = [...(next.goals || []), ...spouseGoals];
+  next.goals = [...(next.goals || []).map(g => ({ ...g, userName: mainName })), ...spouseGoals];
 
   return next;
 }
