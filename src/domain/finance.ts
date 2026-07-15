@@ -24,10 +24,26 @@ export function convertToBase(state: FinanceState, amount: number, currency: str
   return (amount * from) / to;
 }
 
-export function getTransactionInvoiceMonth(t: Transaction, _cards: Card[]): string {
+export function getTransactionInvoiceMonth(t: Transaction, cards: Card[]): string {
   if (t.invoiceMonth) return t.invoiceMonth;
   if (!t.cardId) return t.date.slice(0, 7);
-  return shiftMonth(t.date.slice(0, 7), 1);
+
+  const card = (cards || []).find((c) => c.id === t.cardId);
+  if (!card) {
+    return shiftMonth(t.date.slice(0, 7), 1);
+  }
+
+  const [year, month, day] = t.date.split("-").map(Number);
+  const dueDay = Math.max(1, Math.min(31, Number(card.dueDay) || day));
+  const closingDay = Math.max(1, Math.min(31, Number(card.closingDay) || day));
+
+  let monthOffset = day > closingDay ? 1 : 0;
+  if (dueDay <= closingDay) {
+    monthOffset += 1;
+  }
+
+  const base = new Date(year, month - 1 + monthOffset, 1);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function getInvoiceTransactions(state: FinanceState, month: string): Transaction[] {
