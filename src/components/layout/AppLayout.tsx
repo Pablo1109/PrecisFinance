@@ -171,9 +171,29 @@ export function AppLayout() {
         });
       }
     } else {
+      let finalDate = date;
+      let finalInvoiceMonth: string | undefined = undefined;
+
+      if (type === "expense" && cardId) {
+        let invMonth = getTransactionInvoiceMonth(
+          { date, cardId, type: "expense", amount: parsedAmount } as any,
+          state.cards
+        );
+        if (invMonth === state.settings.selectedMonth) {
+          invMonth = shiftMonth(invMonth, 1);
+        }
+        finalInvoiceMonth = invMonth;
+
+        const [invY, invM] = invMonth.split("-").map(Number);
+        const origD = Number(date.split("-")[2]);
+        const lastDay = new Date(invY, invM, 0).getDate();
+        const finalDay = Math.min(origD, lastDay);
+        finalDate = `${invY}-${String(invM).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
+      }
+
       addTransaction({
         type,
-        date,
+        date: finalDate,
         description,
         amount: parsedAmount,
         currency: state!.settings.baseCurrency,
@@ -187,6 +207,7 @@ export function AppLayout() {
         recurring: false,
         destAccountId: type === "transfer" ? destAccountId : undefined,
         destAmount: type === "transfer" ? parsedAmount : undefined,
+        invoiceMonth: finalInvoiceMonth,
       });
     }
 

@@ -437,8 +437,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           tx.cardId = "";
           tx.reviewed = true;
         } else if (action === "credit") {
-          tx.cardId = opts?.cardId || "";
+          const cardId = opts?.cardId || "";
+          tx.cardId = cardId;
           tx.reviewed = true;
+
+          if (cardId) {
+            let invMonth = getTransactionInvoiceMonth(
+              { date: tx.date, cardId, type: "expense", amount: tx.amount } as any,
+              s.cards
+            );
+            if (invMonth === s.settings.selectedMonth) {
+              invMonth = shiftMonth(invMonth, 1);
+            }
+            tx.invoiceMonth = invMonth;
+
+            const [invY, invM] = invMonth.split("-").map(Number);
+            const origD = Number(tx.date.split("-")[2]);
+            const lastDay = new Date(invY, invM, 0).getDate();
+            const finalDay = Math.min(origD, lastDay);
+            tx.date = `${invY}-${String(invM).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
+          }
         } else if (action === "split") {
           tx.ignored = true;
           tx.reviewed = true;
